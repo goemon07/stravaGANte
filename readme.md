@@ -11,8 +11,8 @@
 ### Threshold
 
 - **distanceThreshold:** Distanza massima entro i quali due possibili circonferenze EPZ possono essere considerate uguali.
-- **intersectionThreshold:** Scarto tra la distanza centroEPZ-endpoint che possiamo accettare oltre al quale l’endpoint viene considerato interno alla circonferenzaEPZ e quindi quest’ultima eliminata.
-- **confidenceThreshold:** Numero minimo di ripetizioni che un possibleEPZ deve avere per non essere scartato.
+- **intersectionThreshold:** Scarto tra la distanza centroEPZ - endpoint che possiamo accettare oltre al quale l’endpoint viene considerato interno alla circonferenzaEPZ e quindi quest’ultima eliminata.
+- **confidenceThreshold:** Numero minimo di ripetizioni che un `possibleEPZ` deve avere per non essere scartato.
 - **tau_converged:** Determina di quanto i centroidi posso spostarsi al massimo per considerare compiuto il ciclo di clustering per trovare gli EPZ nel secondo attacco
 - **tau_disjoint:** Determina la massima distanza che i punti all’interno di un cluster può avere con il suo centro.
 
@@ -34,7 +34,7 @@ La procedura `(.fetchActivity())` inizia ottenendo la lista degli ID di tutte le
 ### Data Pre-Processing
 Dato che il dataset era composto di circa 200 attività, le quali appartenenti anche a luoghi ben distanti da loro, è stato fatto un primo clustering. La logica con la quale sono state raggruppate è tramite semplice distanza tra endpoint di attività. Tutte quelle con uno dei due endpoint distanti meno di un certo valore da un attività ‘modello’ per il cluster, vengono associate al cluster. Quelle che non sono associate ad un cluster, diventano l’attività ‘modello’ per un nuovo cluster.
 
-I cluster, rappresentati dai Model **ActivityCluster**, sono stati ottenuti dal metodo `clusterAllActivities()` presente in `./main.py./main.py`. Questo metodo prende in input il percorso dell’utente del quale si vogliono clusterizzare, e di quale le attività si troveranno nella sottocartella `./activities/`. I vari cluster sono poi stati salvati all’interno del file `ActivityClusterList.json` presente nella cartella del relativo utente. Ad ogni cluster è stato assegnato un ‘id’ incrementale il quale viene usato per l’istanziazione di un ActivityCluster, insieme al suo percorso, dal metodo `initializeActivityClusterFromJson()`.
+I cluster, rappresentati dai Model **ActivityCluster**, sono stati ottenuti dal metodo `clusterAllActivities()` presente in `./main.py`. Questo metodo prende in input il percorso dell’utente del quale si vogliono clusterizzare, e di quale le attività si troveranno nella sottocartella `./activities/`. I vari cluster sono poi stati salvati all’interno del file `ActivityClusterList.json` presente nella cartella del relativo utente. Ad ogni cluster è stato assegnato un ‘id’ incrementale il quale viene usato per l’istanziazione di un ActivityCluster, insieme al suo percorso, dal metodo `initializeActivityClusterFromJson()`.
 
 
 ### Difesa
@@ -44,7 +44,7 @@ Un livello successivo di difesa, prevede che la distanza venga calcolata rispett
 
 Un supplemento a questa difesa prevede l’aggiunta di un punto esattamente alla distanza pari al raggio. (Identificheremo come scelta base quella di aggiungere questo punto, e versione con **“Fuzz”** quella in cui questo punto viene ‘eliminato’)
 
-La routine è contenuta nel file `./main.py`, costituita dalla funzione `fullDisguiseOfActivityCluster()`. La routine prima inizializza un *activityCluster* (che contiene tutte le attività relative), istanzia due oggetti *DataRepresentation* (sferico e geocentrico), e in fine cicla per ogni attività contenute nel cluster chiamando il metodo (relativo alla classe *Activity*) .`completeDisguiseActivityInCluster()`.
+La routine è contenuta nel file `./main.py`, costituita dalla funzione `fullDisguiseOfActivityCluster()`. La routine prima inizializza un *activityCluster* (che contiene tutte le attività relative), istanzia due oggetti *DataRepresentation* (sferico e geocentrico), e in fine cicla per ogni attività contenute nel cluster chiamando il metodo (relativo alla classe *Activity*) `.completeDisguiseActivityInCluster()`.
 
 Questo metodo esegue tutti i tipi di difesa possibili, quindi: Primo livello con e senza Fuzz e secondo livello con e senza Fuzz. Queste difese vengono fatte sia con la rappresentazione dei dati sferica che geocentrica. Ognuna di queste difese darà come risultato una polilinea, che viene codificata e salvata come testo nel file relativo dell’attività.
 
@@ -75,7 +75,7 @@ A questo punto, tramite un algoritmo DBSCAN, si cercano gli *Entry Gates*, ovver
 A questo punto si procede con il trovare il punto di interesse: Per ogni nodo-endpoint, si prende la distanza associata (quanto percorso è stato cancellato dalla difesa per ottenere quel nodo come primo) e la si sottrae a tutte le distanze che quel nodo ha da ogni nodo del grafo. Si sommano poi tutte le distanze per nodi uguali, e quella con il valore minore sarà il nodo di nostro interesse.
 
 ### Raccolta risultati e Statistiche
-Gli attacchi sono poi stati testati sul nostro dataset, i risultati collezionati ed analizzati; queste procedure sono contenute nel file `./stats.py`. Data la limitatezza del dataset, è stato eseguito un processo di bootstrapping, ovvero una tecnica che prevede di prendere dei sottocampioni casuali, con ripetizini, per permettere di irrobustire la stima del test. Questo è fatto nella prima parte, ovvero quella di collezione dei dati, eseguiti tramite le funzioni `retriveStats()` e `retriveStatsSecondAttack()` rispettivamente per il primo e secondo attacco. Queste funzioni simulano la difesa di un batch casuale di attività, scegliendo un punto casuale come centro della difesa, per poi attaccare tramite le funzioni viste fino ad ora. I risultati, salvati in opportuni file `.csv` nella cartella `./Data/Stats/`, sono poi analizzati tramite la funzione `calculateStats()` e `calculateStats2nd()`.
+Gli attacchi sono poi stati testati sul nostro dataset, i risultati collezionati ed analizzati; queste procedure sono contenute nel file `./stats.py`. Data la limitatezza del dataset, è stato eseguito un processo di bootstrapping, ovvero una tecnica che prevede di prendere dei sottocampioni casuali, con ripetizioni, per permettere di irrobustire la stima del test. Questo è fatto nella prima parte, ovvero quella di collezione dei dati, eseguiti tramite le funzioni `retriveStats()` e `retriveStatsSecondAttack()` rispettivamente per il primo e secondo attacco. Queste funzioni simulano la difesa di un batch casuale di attività, scegliendo un punto casuale come centro della difesa, per poi attaccare tramite le funzioni viste fino ad ora. I risultati, salvati in opportuni file `.csv` nella cartella `./Data/Stats/`, sono poi analizzati tramite la funzione `calculateStats()` e `calculateStats2nd()`.
 
 
 ## Struttura
