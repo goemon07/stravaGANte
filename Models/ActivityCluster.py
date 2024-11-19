@@ -100,7 +100,7 @@ class ActivityCluster():
 
     @staticmethod
     def addActivityClusterToJson(activityClusterPath, activityCluster):
-        with open(activityClusterPath, 'r+', encoding="UTF-8") as jsonFile:
+        with open(activityClusterPath, 'w+', encoding="UTF-8") as jsonFile:
             jsonData = json.load(jsonFile)
             for activityClusterEntry in jsonData["ActivityClusterList"]:
                 if activityClusterEntry["center"] == activityCluster["center"]:

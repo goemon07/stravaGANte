@@ -261,11 +261,3 @@ def disguiseActivityInCluster(clusterPath="Data/Strava/39260108/ActivityClusterL
 
 if __name__ == "__main__":
     main()
-
-
-
-    
-
-
-    
-   
