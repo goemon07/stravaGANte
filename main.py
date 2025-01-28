@@ -20,11 +20,11 @@ def main():
 
     clusterAllActivities()
     ####    Test Attack
-    """ attackType = "EPZ"
+    attackType = "EPZ"
     dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(attackType)
     #dataRepresentation = DataRepresentationFactory.SphericalDataRepresentationFactory().create_data_representation(attackType)
     activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterFromJson("Data/Strava/39260108/ActivityClusterList.json", 1)
-    testAttack(activityCluster.activityPathList[:10], dataRepresentation, attackType) """
+    testAttack(activityCluster.activityPathList[:10], dataRepresentation, attackType)
 
 
 def singleDisguiseTest(activityClusterPath = "Data/Strava/39260108/ActivityClusterList.json", activityClusterId = "1", dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(), plot = False):
