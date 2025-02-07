@@ -100,16 +100,28 @@ class ActivityCluster():
 
     @staticmethod
     def addActivityClusterToJson(activityClusterPath, activityCluster):
-        with open(activityClusterPath, 'w+', encoding="UTF-8") as jsonFile:
-            jsonData = json.load(jsonFile)
-            for activityClusterEntry in jsonData["ActivityClusterList"]:
-                if activityClusterEntry["center"] == activityCluster["center"]:
-                    return
-            activityCluster["id"] = len(jsonData["ActivityClusterList"])+1
-            jsonData["ActivityClusterList"].append(activityCluster)
-            jsonFile.seek(0)
-            json.dump(jsonData, jsonFile, indent = 4)
-            jsonFile.truncate()
+        try:
+            with open(activityClusterPath, 'r+', encoding="UTF-8") as jsonFile:
+                try:
+                    jsonData = json.load(jsonFile)
+                except json.JSONDecodeError:
+                    jsonData = {"ActivityClusterList": []}
+                
+                for activityClusterEntry in jsonData["ActivityClusterList"]:
+                    if activityClusterEntry["center"] == activityCluster["center"]:
+                        return
+                
+                activityCluster["id"] = len(jsonData["ActivityClusterList"]) + 1
+                jsonData["ActivityClusterList"].append(activityCluster)
+                
+                jsonFile.seek(0)
+                json.dump(jsonData, jsonFile, indent=4)
+                jsonFile.truncate()
+        except FileNotFoundError:
+            jsonData = {"ActivityClusterList": [activityCluster]}
+            activityCluster["id"] = 1
+            with open(activityClusterPath, 'w', encoding="UTF-8") as jsonFile:
+                json.dump(jsonData, jsonFile, indent=4)
         return
 
 
@@ -188,6 +200,3 @@ class ActivityCluster():
                     activityCluster["center"] = [new_x, new_y]
 
         return ActivityClusterList
-
-
-

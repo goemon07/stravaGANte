@@ -11,6 +11,7 @@ import matplotlib.colors as mcolors
 import datetime
 import time
 import os
+import json
 
 
 def main():
@@ -18,13 +19,14 @@ def main():
 
     
 
-    clusterAllActivities()
+    # clusterAllActivities()
     ####    Test Attack
     attackType = "EPZ"
-    dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(attackType)
-    #dataRepresentation = DataRepresentationFactory.SphericalDataRepresentationFactory().create_data_representation(attackType)
-    activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterFromJson("Data/Strava/39260108/ActivityClusterList.json", 1)
-    testAttack(activityCluster.activityPathList[:10], dataRepresentation, attackType)
+    #dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(attackType)
+    dataRepresentation = DataRepresentationFactory.SphericalDataRepresentationFactory().create_data_representation(attackType)
+    activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterFromJson("Data/Strava/39260108/ActivityClusterList.json", 2)
+    testAttack(activityCluster.activityPathList[:30], dataRepresentation, attackType)
+    # attack(activityCluster.activityPathList[:10], dataRepresentation, attackType)
 
 
 def singleDisguiseTest(activityClusterPath = "Data/Strava/39260108/ActivityClusterList.json", activityClusterId = "1", dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(), plot = False):
@@ -138,10 +140,10 @@ def testAttack(activityPathList, dataRepresentation, attackType = "EPZ+Fuzz"):
     plt.plot()
 
 
-    addPolylineToPlot(ax, Activity.Activity.initActivityFromPath(activityPathList[0]).decodePolyline(attackType), "base")
+    addPolylineToPlot(ax, Activity.Activity.initActivityFromPath(activityPathList[0]).decodePolyline(), "base") #attackType), "base")
     for activityPath in activityPathList:
         activity = Activity.Activity.initActivityFromPath(activityPath)
-        coordsList = activity.decodePolyline(attackType)
+        coordsList = activity.decodePolyline() #attackType)
         
         if dataRepresentation.__class__.__name__ == "GeocentricDataRepresentation":
             coordsList = dataRepresentation.convertCoordsListIntoRepresentation(coordsList)
@@ -188,15 +190,15 @@ def attack(activityPathList, dataRepresentation, AttackType):
     now = time.time()
     print("start")
     epzsa.initializeAttack()
-    print(len(epzsa.possibleEPZs))
+    print(f"All possible EPZ: {len(epzsa.possibleEPZs)}")
     now2 = time.time()
     print(now2-now)
     epzsa.deleteEPZintersectingActivity()
-    print(len(epzsa.possibleEPZs))
+    print(f"Reduced EPZ: {len(epzsa.possibleEPZs)}")
     now3 = time.time()
     print(now3-now2)
     epzsa.groupCloseEPZs()
-    print(len(epzsa.possibleEPZs))
+    print(f"Group close EPZ: {len(epzsa.possibleEPZs)}")
     now4 = time.time()
     print(now4-now3)
     epzsa.deleteInformationlessEPZ()
@@ -246,8 +248,19 @@ def plotUserActivity(userId="39260108"):
 ####    Test Activity clustering
 def clusterAllActivities(userPath="Data/Strava/39260108"):
     activityClusterList = ActivityCluster.ActivityCluster.getAllClusters(userPath+"/activities", 1600)
+    
+    # Debug statement to check the contents of activityClusterList
+    print(f"Found {len(activityClusterList)} activity clusters.")
+    
     for activityCluster in activityClusterList:
+        # Debug statement to check each activityCluster
+        # print(f"Adding activity cluster: {activityCluster}")
         ActivityCluster.ActivityCluster.addActivityClusterToJson(userPath+"/ActivityClusterList.json", activityCluster)
+    
+    # Debug statement to check the contents of the JSON file after writing
+    # with open(userPath+"/ActivityClusterList.json", 'r') as f:
+    #     data = json.load(f)
+        # print(f"Contents of ActivityClusterList.json: {data}")
     
 
 ####        Test for disguising Activities

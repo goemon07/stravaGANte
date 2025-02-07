@@ -35,7 +35,9 @@ class Activity():
 
 
     def decodePolyline(self, whatPolyLine = "polyline"):
+        print(self.maps[whatPolyLine])
         coordsList = polyline.decode(self.maps[whatPolyLine], 5, geojson=True)
+        # coordsList = polyline.decode("polyline", 5, geojson=True)
         return [coords[::-1] for coords in coordsList]
             
     

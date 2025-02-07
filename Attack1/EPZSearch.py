@@ -2,11 +2,12 @@ import collections
 
 class EPZSearch():
     
-    def __init__(self, data_representation, activityEndPointList, appInfo, attackType):
+    def __init__(self, data_representation, activityPathList, appInfo, attackType):
 
         self.attackType = attackType
         self.dataRepresentation = data_representation
-        self.activityEndpointList = activityEndPointList
+        self.activityPathList = activityPathList
+        self.activityEndpointList = self.initWithPathList(self.dataRepresentation, self.activityPathList, appInfo, attackType)
         self.endPointPairs = self.getAllPairs(self.activityEndpointList)
         
         #Initialize App-Specific Parameters
@@ -18,7 +19,7 @@ class EPZSearch():
 
     def initWithPathList(self, dataRepresentation, activityPathList, appInfo, attackType):
         activityEndpointList = dataRepresentation.getActivityEndpointList(activityPathList)
-        return EPZSearch(dataRepresentation, activityEndpointList, appInfo, attackType)
+        return activityEndpointList
 
     def attack(self):
         self.initializeAttack()

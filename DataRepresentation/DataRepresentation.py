@@ -39,11 +39,13 @@ class SphericalDataRepresentation(DataRepresentation):
     def getActivityEndpointList(self, activityPathList):
         activityEndpointList = []
         for activityPath in activityPathList:
-            values = jsonHelper.getJsonValues(activityPath, ["id", "map.epz_polyline"])
-            coords = polyline.decode(values["map.epz_polyline"])
+            # values = jsonHelper.getJsonValues(activityPath, ["id", "map.epz_polyline"])
+            # coords = polyline.decode(values["map.epz_polyline"])
+            values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
+            coords = polyline.decode(values["map.polyline"])
             print(coords[0])
-            activityEndpointList.append(Point.SphericalPoint(coords[0][1],coords[0][0], id="start"+str(values["id"])))
-            activityEndpointList.append(Point.SphericalPoint(coords[-1][1],coords[-1][0], id="end"+str(values["id"])))
+            activityEndpointList.append(Point.SphericalPoint(coords[0][0],coords[0][1], id="start"+str(values["id"])))
+            activityEndpointList.append(Point.SphericalPoint(coords[-1][0],coords[-1][1], id="end"+str(values["id"])))
         return activityEndpointList
 
     def getPossibleEPZfromPointPair(self, endPointPair, EPZRadiuses, minDistanceThreshold=4000):
@@ -116,8 +118,8 @@ class GeocentricDataRepresentation(DataRepresentation):
         for activityPath in activityPathList:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.epz_polyline"])
             coords = polyline.decode(values["map.epz_polyline"])
-            start_x, start_y = self.transformLatLon(coords[0][1],coords[0][0])
-            end_x, end_y = self.transformLatLon(coords[-1][1],coords[-1][0])
+            start_x, start_y = self.transformLatLon(coords[0][0],coords[0][1])
+            end_x, end_y = self.transformLatLon(coords[-1][0],coords[-1][1])
             activityEndpointList.append(Point.SphericalPoint(start_x, start_y, id="start"+str(values["id"])))
             activityEndpointList.append(Point.SphericalPoint(end_x, end_y, id="end"+str(values["id"])))
         return activityEndpointList
