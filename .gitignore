@@ -4,6 +4,6 @@
 *.pyc
 *.env
 *.gpx
-Data/*.json
+Data/Syntetic/
 *.vscode
 images/*
