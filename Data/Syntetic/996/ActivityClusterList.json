@@ -1,0 +1,21 @@
+{
+    "ActivityClusterList": [
+        {
+            "id": 1,
+            "source": "clustering",
+            "radius": 1600,
+            "center": [
+                34.101663,
+                -118.34102600000001
+            ],
+            "activitiesPath": "Data/Syntetic/996",
+            "activityIdList": [
+                "route_loc996_1",
+                "route_loc996_2",
+                "route_loc996_4",
+                "route_loc996_3",
+                "route_loc996_0"
+            ]
+        }
+    ]
+}

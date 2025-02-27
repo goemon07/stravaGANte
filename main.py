@@ -19,12 +19,12 @@ def main():
 
     
 
-    # clusterAllActivities()
+    clusterAllActivities()
     ####    Test Attack
     attackType = "EPZ"
-    #dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(attackType)
-    dataRepresentation = DataRepresentationFactory.SphericalDataRepresentationFactory().create_data_representation(attackType)
-    activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterFromJson("Data/Strava/39260108/ActivityClusterList.json", 2)
+    dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation()
+    # dataRepresentation = DataRepresentationFactory.SphericalDataRepresentationFactory().create_data_representation(attackType)
+    activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterFromJson("Data/Strava/39260108/ActivityClusterList.json", 1)
     testAttack(activityCluster.activityPathList[:30], dataRepresentation, attackType)
     # attack(activityCluster.activityPathList[:10], dataRepresentation, attackType)
 
@@ -32,7 +32,7 @@ def main():
 def singleDisguiseTest(activityClusterPath = "Data/Strava/39260108/ActivityClusterList.json", activityClusterId = "1", dataRepresentation = DataRepresentationFactory.GeocentricDataRepresentationFactory().create_data_representation(), plot = False):
     #dataRepresentation = DataRepresentationFactory.SphericalDataRepresentationFactory().create_data_representation()
     
-    activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterFromJson(activityClusterPath, activityClusterId)
+    activityCluster = ActivityCluster.ActivityCluster.initializeActivityClusterJson(activityClusterPath, activityClusterId)
     activity = Activity.Activity.initActivityFromPath(activityCluster.activityPathList[0])
     fig, ax = plt.subplots()
     

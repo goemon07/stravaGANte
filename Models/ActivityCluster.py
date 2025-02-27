@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import os
 import geopy.distance
 import json
+import gpxpy
 
 class ActivityCluster():
 
@@ -59,8 +60,9 @@ class ActivityCluster():
     @staticmethod
     def initializeActivityClusterFromJson(jsonPath, id=None):
         jsonData = json.loads(open(jsonPath, encoding="utf-8").read())
+        jsonData["ActivityClusterList"].append({"ActivityClusterListPath": jsonPath})
         if id == None:
-            return ActivityCluster(**jsonData["ActivityClusterList"][0])
+            return ActivityCluster(**jsonData["ActivityClusterListPath"][0])
         else:
             for activityClusteritem in jsonData["ActivityClusterList"]:
                 if activityClusteritem["id"] == id:

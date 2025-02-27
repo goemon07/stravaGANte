@@ -1,7 +1,10 @@
+import os
 import polyline
 import matplotlib.pyplot as plt
 import json
 from Utility.jsonHelper import jsonHelper
+import gpxpy
+import gpxpy.gpx
 
 class Activity():
 
@@ -35,7 +38,7 @@ class Activity():
 
 
     def decodePolyline(self, whatPolyLine = "polyline"):
-        print(self.maps[whatPolyLine])
+        # print(self.maps[whatPolyLine])
         coordsList = polyline.decode(self.maps[whatPolyLine], 5, geojson=True)
         # coordsList = polyline.decode("polyline", 5, geojson=True)
         return [coords[::-1] for coords in coordsList]
@@ -118,7 +121,7 @@ class Activity():
         while sphericRepresentation.distance(coordsList[0], center) < radius:
             last = coordsList.pop(0)
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(center, last, coordsList[0], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(tuple(center), last, coordsList[0], radius)
         coordsList.insert(0, new_point)
         ## Cut End
         while sphericRepresentation.distance(coordsList[-1], center) <= radius:
@@ -201,10 +204,6 @@ class Activity():
         return self.maps
 
 
-
-
-
-
     def updateActivityJson(self, key, value):  
         with open(self.activityPath, 'r+', encoding="UTF-8") as jsonFile:
             jsonData = json.load(jsonFile)
@@ -222,3 +221,48 @@ class Activity():
             json.dump(jsonData, jsonFile, indent = 4)
             jsonFile.truncate()
         return
+
+
+    #################### GPX handling ####################
+    def encode_polyline_from_gpx(gpx_file):
+        try:
+            with open(gpx_file, 'r') as f:
+                gpx = gpxpy.parse(f)
+        except FileNotFoundError:
+            print(f"Error: GPX file not found at '{gpx_file}'")
+            return None
+        except gpxpy.gpx.GPXException as e:
+            print(f"Error parsing GPX file: {e}")
+            return None
+
+        coordList = []
+        for point in gpx.routes[0].points:
+            coordList.append((point.latitude, point.longitude))
+
+        if not coordList:
+            print("No track coordList found in the GPX file.")
+            return None, None, None
+        else:
+            start_point = (coordList[0][0], coordList[0][1])
+            end_point = (coordList[-1][0], coordList[-1][1])
+            return Activity.encodePolyline(coordList), start_point, end_point
+
+   
+    @staticmethod
+    def initializeActivityFromGpx(gpxPath):
+        encoded_polyline, start_point, end_point = Activity.encode_polyline_from_gpx(gpxPath)
+
+        if encoded_polyline:
+            json_file_path = os.path.join(gpxPath.replace(".gpx", ".json"))
+            with open(json_file_path, 'w', encoding='utf-8') as json_file:
+                json.dump({
+                    "map": {
+                        "polyline": encoded_polyline
+                    },
+                    "start_latlng": start_point,
+                    "end_latlng": end_point
+                }, json_file, ensure_ascii=False, indent=4)
+            
+            return 1
+        else:
+            return 0

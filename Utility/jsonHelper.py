@@ -32,10 +32,17 @@ class jsonHelper():
         return activityIdList
     
     @staticmethod
+    def savePolylineToJson(jsonPath, polyline):
+        with open(jsonPath, 'w') as f:
+            json.dump(polyline, f)
+        return
+    
+    @staticmethod
     def getActivityIdListByPath(path):
         activityIdList = []
         for activityId in os.listdir(path):
-            activityIdList.append(activityId)
+            if activityId.endswith('.json'):
+                activityIdList.append(activityId)
         return activityIdList
         
     ### Returns the Value for the Attribute "Key" in the json file in "jsonPath"

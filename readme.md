@@ -1,50 +1,46 @@
 # StravaGANte
 
-## Notazione
-- **Attività:** Insieme di informazioni relative ad un attività di corsa, principalmente distanza e percorso
-- **Percorso:** Tragitto percorso dall’atleta, rappresentato come una linea spezzata i cui vertici sono tutte le coordinate rilevate durante l’attività.
-- **Endpoints:** Punti di inizio o fine del percorso di un’attività
-- **Atleta:** Utente bersaglio, del quale abbiamo a disposizione un set più o meno vasto di Attività.
-- **EPZ(Endpoint Privacy Zone):** Area di privacy in cui vengono nascosti gli endpoint delle attività
+## Notation
+- **Activity:** Set of information related to a running activity, mainly distance and route.
+- **Path:** Route traveled by the athlete, represented as a broken line whose vertices are all the coordinates measured during the activity.
+- **Endpoints:** Start or end points of the route of an activity.
+- **Athlete:** Target user, of whom we have available a more or less extensive set of Activities.
+- **EPZ (Endpoint Privacy Zone):** Privacy zone in which activity endpoints are hidden.
 
 
 ### Threshold
 
-- **distanceThreshold:** Distanza massima entro i quali due possibili circonferenze EPZ possono essere considerate uguali.
-- **intersectionThreshold:** Scarto tra la distanza centroEPZ - endpoint che possiamo accettare oltre al quale l’endpoint viene considerato interno alla circonferenzaEPZ e quindi quest’ultima eliminata.
-- **confidenceThreshold:** Numero minimo di ripetizioni che un `possibleEPZ` deve avere per non essere scartato.
-- **tau_converged:** Determina di quanto i centroidi posso spostarsi al massimo per considerare compiuto il ciclo di clustering per trovare gli EPZ nel secondo attacco
-- **tau_disjoint:** Determina la massima distanza che i punti all’interno di un cluster può avere con il suo centro.
-
-
+- **distanceThreshold:** Maximum distance within which two possible EPZ circumferences can be considered equal.
+- **intersectionThreshold:** Gap between the centerEPZ - endpoint distance that we can accept beyond which the endpoint is considered inside the circumferenceEPZ and thus the latter eliminated.
+- **confidenceThreshold:** Minimum number of repetitions that a `possibleEPZ` must have in order not to be discarded.
+- **tau_converged:** Determines how far the centroids can move at most to consider the clustering cycle to find the EPZs in the second attack completed
+- **tau_disjoint:** Determines the maximum distance that points within a cluster can have with its center.
 
 ## Data Flow
-### Raccolta dati
+### Data collection
 
-I dati vengono raccolti tramite la procedura contenuta in `DataCollector/main.py`. 
+- Main file: `DataCollector/main.py`. 
 
-Si inizia con la creazione di un’istanza di `./Utility/ApplicationInfo()`, che legge da un file `.env` le variabili di sistema relati e all’applicazione istanziata (Strava).
-
-Si crea poi un istanza di `./DataController/AuthController()`, necessario a creare la sessione di autenticazione con l’applicazione, tramite le informazioni precedentemente caricate nell’`ApplicationInfo`.
-
-Una volta avviata l’istanza di connessione con l’applicazione, si crea un istanza di `./DataCollector/ActivityRetrive()` per avviare la procedura di ottenimento di tutte le attività.
-
-La procedura `(.fetchActivity())` inizia ottenendo la lista degli ID di tutte le attività dell’utente, per poi scaricarne una ad una e salvarle nella cartella adatta (`”Data/Strava/UserID”`)
+1. Init of `./Utility/ApplicationInfo()`, which reads from `.env` vars data related to Strava APIs;
+2. Init of `./DataController/AuthController()`, to create the session with Strava;
+3. Init of `./DataCollector/ActivityRetrive()` to actually retrieve data;
+4. Procedure `(.fetchActivity())` gets activities' IDs of the selected user and then donwload those under `”Data/Strava/UserID”`.
 
 ### Data Pre-Processing
-Dato che il dataset era composto di circa 200 attività, le quali appartenenti anche a luoghi ben distanti da loro, è stato fatto un primo clustering. La logica con la quale sono state raggruppate è tramite semplice distanza tra endpoint di attività. Tutte quelle con uno dei due endpoint distanti meno di un certo valore da un attività ‘modello’ per il cluster, vengono associate al cluster. Quelle che non sono associate ad un cluster, diventano l’attività ‘modello’ per un nuovo cluster.
+Because of the distance in between activities of the same athlete, the data has been divided using a clustering based on EPZ distances (a model activity is selected and the grouping is made based on EPZ distances related to that one). 
 
-I cluster, rappresentati dai Model **ActivityCluster**, sono stati ottenuti dal metodo `clusterAllActivities()` presente in `./main.py`. Questo metodo prende in input il percorso dell’utente del quale si vogliono clusterizzare, e di quale le attività si troveranno nella sottocartella `./activities/`. I vari cluster sono poi stati salvati all’interno del file `ActivityClusterList.json` presente nella cartella del relativo utente. Ad ogni cluster è stato assegnato un ‘id’ incrementale il quale viene usato per l’istanziazione di un ActivityCluster, insieme al suo percorso, dal metodo `initializeActivityClusterFromJson()`.
+- Clusters, represented by the model **ActivityCluster**, obtained using the `clusterAllActivities()` method. The method takes as input the path of the folder containing the activities' files (provide athlete's folder and it will look for `activities` folder).
+- The output is `ActivityClusterList.json` file in the athlete's folder.
+- Each cluster gets an incremental `id` used in `initializeActivityClusterFromJson()`.
 
+### Defence
+- **First level defence** takes each activity and deletes recursively endpoints at a certain distance from the center of the selected EPZ.
 
-### Difesa
-Il primo livello di difesa, prende ogni attività ed elimina ricorsivamente gli endpoint che sono ad una distanza dal punto scelto come centro dell’EPZ inferiore al suo raggio. 
-
-Un livello successivo di difesa, prevede che la distanza venga calcolata rispetto ad un punto spostato dal centro dell’EPZ.
-
-Un supplemento a questa difesa prevede l’aggiunta di un punto esattamente alla distanza pari al raggio. (Identificheremo come scelta base quella di aggiungere questo punto, e versione con **“Fuzz”** quella in cui questo punto viene ‘eliminato’)
-
-La routine è contenuta nel file `./main.py`, costituita dalla funzione `fullDisguiseOfActivityCluster()`. La routine prima inizializza un *activityCluster* (che contiene tutte le attività relative), istanzia due oggetti *DataRepresentation* (sferico e geocentrico), e in fine cicla per ogni attività contenute nel cluster chiamando il metodo (relativo alla classe *Activity*) `.completeDisguiseActivityInCluster()`.
+- *[EPZ+Fuzz]* In the **second level defence**, the distance is calculated on a shifted center of the EPZ, different from the selected center.
+- *[EPZ][default choice]* A additional level of defence adds a point to the gpx track at the exact distance equal to the radious.
+- The routine is in `fullDisguiseOfActivityCluster()` in `./main.py`.
+It first init *activityCluster* and then init *DataRepresentation* (spheric or geocentric) before proceeding with the actual defence (`.completeDisguiseActivityInCluster()`).
+- This method produces all the two possible defences with both data representations (spheric and geocentric) and store the result (polylines) in the activity json file (total of 4 `defence` polylines).
 
 Questo metodo esegue tutti i tipi di difesa possibili, quindi: Primo livello con e senza Fuzz e secondo livello con e senza Fuzz. Queste difese vengono fatte sia con la rappresentazione dei dati sferica che geocentrica. Ognuna di queste difese darà come risultato una polilinea, che viene codificata e salvata come testo nel file relativo dell’attività.
 
