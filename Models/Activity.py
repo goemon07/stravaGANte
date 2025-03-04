@@ -121,13 +121,13 @@ class Activity():
         while sphericRepresentation.distance(coordsList[0], center) < radius:
             last = coordsList.pop(0)
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(tuple(center), last, coordsList[0], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(tuple(center), coordsList[0], radius)
         coordsList.insert(0, new_point)
         ## Cut End
         while sphericRepresentation.distance(coordsList[-1], center) <= radius:
             last = coordsList.pop()
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(center, last, coordsList[-1], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(tuple(center), coordsList[-1], radius)
         coordsList.append(new_point)
         ## Save encoded
         self.maps["EPZ"] = self.encodePolyline(coordsList)
@@ -139,13 +139,13 @@ class Activity():
         while sphericRepresentation.distance(cloackedCoordsList[0], cloackedCenter) < radius:
             last = cloackedCoordsList.pop(0)
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenter, last, cloackedCoordsList[0], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenter, cloackedCoordsList[0], radius)
         cloackedCoordsList.insert(0, new_point)
         ## Cut End
         while sphericRepresentation.distance(cloackedCoordsList[-1], cloackedCenter) <= radius:
             last = cloackedCoordsList.pop()
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenter, last, coordsList[-1], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenter, coordsList[-1], radius)
         cloackedCoordsList.append(new_point)
         ## Save Encoded
         self.maps["CloackedEPZ"] = self.encodePolyline(cloackedCoordsList)

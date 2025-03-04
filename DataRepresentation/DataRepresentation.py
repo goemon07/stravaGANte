@@ -103,13 +103,23 @@ class SphericalDataRepresentation(DataRepresentation):
     @staticmethod
     def generateCloackedCenter(center, radius):
         radius_degrees = radius/111000
-        distance = random.uniform(0.4*radius_degrees, 0.9*radius_degrees)
+        distance = random.uniform(0.4, 0.9) * radius_degrees
         angle = random.uniform(0 , 2*math.pi)
         delta_lat = math.cos(angle)*distance
         delta_lon = math.sin(angle)*distance
         new_lat = center[0] + delta_lat
         new_lon = center[1] + delta_lon
         return [new_lat, new_lon]
+    
+    @staticmethod
+    def transformLatLon(lat, lon):
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:4978", always_xy=True)
+        return transformer.transform(lat, lon)
+
+    @staticmethod
+    def transformToLatLon(x, y, z):
+        transformer = Transformer.from_crs("EPSG:4978", "EPSG:4326", always_xy=True)
+        return transformer.transform(x, y, z)
 
 class GeocentricDataRepresentation(DataRepresentation):
 
@@ -193,7 +203,8 @@ class GeocentricDataRepresentation(DataRepresentation):
 
     @staticmethod
     def generateCloackedCenter(center, radius):
-        distance = random.uniform(0.4*radius, 0.9*radius)
+        radius_degrees = radius / 111000
+        distance = random.uniform(0.4, 0.9)*radius_degrees
         angle = random.uniform(0, 2*math.pi)
         delta_x = math.cos(angle)*distance
         delta_y = math.sin(angle)*distance

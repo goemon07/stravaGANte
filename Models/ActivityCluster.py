@@ -60,9 +60,9 @@ class ActivityCluster():
     @staticmethod
     def initializeActivityClusterFromJson(jsonPath, id=None):
         jsonData = json.loads(open(jsonPath, encoding="utf-8").read())
-        jsonData["ActivityClusterList"].append({"ActivityClusterListPath": jsonPath})
+        jsonData["ActivityClusterList"][0].update({"ActivityClusterListPath" : jsonPath})
         if id == None:
-            return ActivityCluster(**jsonData["ActivityClusterListPath"][0])
+            return ActivityCluster(**jsonData["ActivityClusterList"][0])
         else:
             for activityClusteritem in jsonData["ActivityClusterList"]:
                 if activityClusteritem["id"] == id:
@@ -88,7 +88,7 @@ class ActivityCluster():
             self.center = newCenter[list(newCenter)[0]]
         else:
             self.cloackedCenter = newCenter[list(newCenter)[0]]
-        with open(self.ActivityClusterListPath, 'w+') as jsonFile:
+        with open(self.ActivityClusterListPath, 'r+') as jsonFile:
             jsonData = json.load(jsonFile)
             for activityClusterEntry in jsonData["ActivityClusterList"]:
                 if activityClusterEntry["id"] == self.id:
