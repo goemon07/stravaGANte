@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import json
 from Utility.jsonHelper import jsonHelper
 import gpxpy
+import math
 import gpxpy.gpx
 
 class Activity():
@@ -52,7 +53,7 @@ class Activity():
 
 
     def addActivityToPlot(self, plt, whatPolyline = "EPZ",  addLabel = False):
-        coordinateList = self.decodePolyline(whatPolyline)
+        coordinateList = self.dodePolyline(whatPolyline)
         ys, xs = zip(*coordinateList)
         plt.plot(xs[0], ys[0], marker='o', color='g', ms=5)
         if addLabel:
@@ -111,9 +112,24 @@ class Activity():
             if updateJson:
                 self.updateActivityJson("map.epz_polyline", self.EPZpolyLine)
             return
-        
+
+    @staticmethod
+    def save_gpx_from_polyline(polyline_str, filename):
+        coords = polyline.decode(polyline_str, 5, geojson=True)
+        gpx = gpxpy.gpx.GPX()
+        gpx_track = gpxpy.gpx.GPXTrack()
+        gpx.tracks.append(gpx_track)
+        gpx_segment = gpxpy.gpx.GPXTrackSegment()
+        gpx_track.segments.append(gpx_segment)
+
+        for coord in coords:
+            gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(coord[1], coord[0]))
+
+        with open(filename, 'w') as f:
+            f.write(gpx.to_xml())
 
     def completeDisguiseActivityInCluster(self, center, radius, cloackedCenter, sphericRepresentation, geoRepresentation):
+        cloackedCenterTuple = tuple(cloackedCenter)
         coordsList = self.decodePolyline()
         cloackedCoordsList = coordsList.copy()
         geoCoordsList = coordsList.copy()
@@ -132,20 +148,22 @@ class Activity():
         ## Save encoded
         self.maps["EPZ"] = self.encodePolyline(coordsList)
         self.maps["EPZ+Fuzz"] = self.encodePolyline(coordsList[1:-1])
+
+        self.save_gpx_from_polyline(self.maps["EPZ"], self.activityPath.replace(".json", "_EPZ.gpx"))
         
 
         ###     Disguise with cloacking
         ## Cut Start
-        while sphericRepresentation.distance(cloackedCoordsList[0], cloackedCenter) < radius:
+        while sphericRepresentation.distance(cloackedCoordsList[0], cloackedCenterTuple) < radius:
             last = cloackedCoordsList.pop(0)
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenter, cloackedCoordsList[0], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenterTuple, cloackedCoordsList[0], radius)
         cloackedCoordsList.insert(0, new_point)
         ## Cut End
-        while sphericRepresentation.distance(cloackedCoordsList[-1], cloackedCenter) <= radius:
+        while sphericRepresentation.distance(cloackedCoordsList[-1], cloackedCenterTuple) <= radius:
             last = cloackedCoordsList.pop()
         #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenter, coordsList[-1], radius)
+        new_point = sphericRepresentation.getPointOnCircumference(cloackedCenterTuple, coordsList[-1], radius)
         cloackedCoordsList.append(new_point)
         ## Save Encoded
         self.maps["CloackedEPZ"] = self.encodePolyline(cloackedCoordsList)
@@ -170,6 +188,7 @@ class Activity():
         geoCoordsList.append(new_point)
         ## Save encoded
         geoCoordsList = geoRepresentation.convertCoordsListIntoLatLon(geoCoordsList)
+        
         self.maps["GeocentricEPZ"] = self.encodePolyline(geoCoordsList)
         self.maps["GeocentricEPZ+Fuzz"] = self.encodePolyline(geoCoordsList[1:-1])
 

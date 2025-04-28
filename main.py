@@ -90,8 +90,8 @@ def compairDataRepresentation(activityClusterPath = "Data/Strava/39260108/Activi
         activityEnd = sphericalEndpoints[n+0].center
         geoActivityStart = geocentricEndpoints[n+1].center
         geoActivityEnd = geocentricEndpoints[n+0].center
-        geoConvertedStart = geocentricData.transformToLatLon(*geoActivityStart)
-        geoConvertedEnd = geocentricData.transformToLatLon(*geoActivityEnd)
+        geoConvertedStart = geocentricData.transformToLatLon(*geoActivityStart)[::-1]
+        geoConvertedEnd = geocentricData.transformToLatLon(*geoActivityEnd)[::-1]
         ax.plot(*activityStart[::-1], "or")
         ax.plot(*activityEnd[::-1], "or")
         ax.plot(*geoConvertedStart[::-1], "ob")

@@ -83,7 +83,7 @@ class EPZSearch():
                 
                 # Check for convergence
                 centroid_changes = [self.euclidean_distance(UTMDataRepresentation.UTMEndpoint(*prev_centroids[i], 0, 'A', '', '', 0), UTMDataRepresentation.UTMEndpoint(*new_centroids[i], 0, 'A', '', '', 0)) for i in range(k)]
-                print(tau_converged, centroid_changes)
+                # print(tau_converged, centroid_changes)
                 if all(change < tau_converged for change in centroid_changes):
                     break
                 
@@ -120,14 +120,15 @@ class EPZSearch():
         # Retrieve the graph
         while True:
             try:
-                G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()))
+                app = utm.to_latlon(*epz_circle[0], *self.getZoneInfo())
+                G = ox.graph_from_point(app, 100) #tau_snap)
                 break
             except (ConnectTimeout, ConnectionError, ProtocolError, requests.exceptions.RequestException) as e:
                 print(f"Connessione fallita, ritento")
             raise Exception(f"Impossibile connettersi")
 
         # Prepare the graph
-        G = ox.utils_graph.truncate.largest_component(G)
+        G = ox.truncate.largest_component(G)
 
         # enhance graph by chaining
         #G = self.enhance_graph(G)
@@ -138,7 +139,7 @@ class EPZSearch():
         endpointNodeDict = {}
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
-            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], True)
+            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords()), return_dist=True)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node
@@ -224,7 +225,7 @@ class EPZSearch():
 
         ## Finding node of actual POI for debugging purposes
         actualPOI = [11.917602, 45.426466]
-        nodePOI, distancePOI = ox.distance.nearest_nodes(G, *actualPOI, True)
+        nodePOI, distancePOI = ox.distance.nearest_nodes(G, *actualPOI, return_dist=True)
             
 
             
@@ -262,10 +263,10 @@ class EPZSearch():
     def retriveSensitiveLocationThroughClusters(self, epz_circle, tau_snap = 50, eps = 30, min_samples = 1):
         
         # Retrieve the graph
-        G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()))
+        G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()), tau_snap)
 
         # Prepare the graph
-        G = ox.utils_graph.truncate.largest_component(G)
+        G = ox.truncate.largest_component(G)
 
         # enhance graph by chaining
         #G = self.enhance_graph(G)
@@ -276,7 +277,7 @@ class EPZSearch():
         endpointNodeDict = {}
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
-            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], True)
+            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords()), return_dist=True)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node
@@ -364,7 +365,7 @@ class EPZSearch():
 
         ## Finding node of actual POI for debugging purposes
         actualPOI = [11.917602, 45.426466]
-        nodePOI, distancePOI = ox.distance.nearest_nodes(G, *actualPOI, True)
+        nodePOI, distancePOI = ox.distance.nearest_nodes(G, *actualPOI, return_dist=True)
             
 
             
@@ -503,8 +504,7 @@ class EPZSearch():
             xy = X[class_member_mask]
             latlon = []
             for coords in xy:
-                latlon.append(utm.to_latlon(*coords, *self.getZoneInfo())[::-1])
-            latlon = np.array(latlon)
+                latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
             plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
                     markeredgecolor='k', markersize=15, alpha=0.3)
         
@@ -536,7 +536,7 @@ class EPZSearch():
             xy = X[class_member_mask]
             latlon = []
             for coords in xy:
-                latlon.append(utm.to_latlon(*coords, *self.getZoneInfo())[::-1])
+                latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
             latlon = np.array(latlon)
             plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
                     markeredgecolor='k', markersize=14)

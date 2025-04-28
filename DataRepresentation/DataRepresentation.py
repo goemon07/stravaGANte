@@ -98,7 +98,7 @@ class SphericalDataRepresentation(DataRepresentation):
     def getPointOnCircumference(self, center, outerPoint, radius):
         geod = Geodesic.WGS84.InverseLine(*center, *outerPoint)
         endpoint = geod.Position(radius, Geodesic.STANDARD)        
-        return [endpoint['lat2'],endpoint['lon2']]
+        return (round(endpoint['lat2'], 5), round(endpoint['lon2'], 5))
     
     @staticmethod
     def generateCloackedCenter(center, radius):
@@ -113,13 +113,16 @@ class SphericalDataRepresentation(DataRepresentation):
     
     @staticmethod
     def transformLatLon(lat, lon):
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError(f"Invalid latitude or longitude values: lat={lat}, lon={lon}")
         transformer = Transformer.from_crs("EPSG:4326", "EPSG:4978", always_xy=True)
         return transformer.transform(lat, lon)
 
     @staticmethod
     def transformToLatLon(x, y, z):
         transformer = Transformer.from_crs("EPSG:4978", "EPSG:4326", always_xy=True)
-        return transformer.transform(x, y, z)
+        #return transformer.transform(x, y, z)
+        return transformer.transform(x, y)[::-1]
 
 class GeocentricDataRepresentation(DataRepresentation):
 
@@ -128,27 +131,38 @@ class GeocentricDataRepresentation(DataRepresentation):
         for activityPath in activityPathList:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
             coords = polyline.decode(values["map.polyline"])
-            start_x, start_y = self.transformLatLon(coords[0][0],coords[0][1])
-            end_x, end_y = self.transformLatLon(coords[-1][0],coords[-1][1])
-            activityEndpointList.append(Point.SphericalPoint(start_x, start_y, id="start"+str(values["id"])))
-            activityEndpointList.append(Point.SphericalPoint(end_x, end_y, id="end"+str(values["id"])))
+            # start_x, start_y = self.transformLatLon(coords[0][0],coords[0][1])
+            # end_x, end_y = self.transformLatLon(coords[-1][0],coords[-1][1])
+            start_lat, start_lon = coords[0][0], coords[0][1]
+            end_lat, end_lon = coords[-1][0],coords[-1][1]
+            activityEndpointList.append(Point.SphericalPoint(start_lat, start_lon, id="start"+str(values["id"])))
+            activityEndpointList.append(Point.SphericalPoint(end_lat, end_lon, id="end"+str(values["id"])))
         return activityEndpointList
     
     def convertCoordsListIntoRepresentation(self, coordsList):
+        coordsList = [coords for coords in coordsList if not any(math.isnan(coord) for coord in coords)]
         return [self.transformLatLon(lat, lon) for lat, lon in coordsList]
 
     def convertCoordsListIntoLatLon(self, coordsList):
-        return [self.transformToLatLon(x, y) for x, y in coordsList]
+        c = []
+        for x, y in coordsList:
+            c.append(self.transformToLatLon(x, y))
+        return c
     
     @staticmethod
     def transformLatLon(lat, lon):
-        transformer = Transformer.from_crs("EPSG:4326","EPSG:3857", always_xy =True)
-        return transformer.transform(lat, lon)
+        if any([math.isnan(lat), math.isnan(lon)]):
+            print(f"Invalid latitude or longitude values: lat={lat}, lon={lon}")
+        # transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:32618", always_xy=True)
+        t = transformer.transform(lon, lat)
+        return t
 
     @staticmethod
     def transformToLatLon(x, y):
-        transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy =True)
-        return transformer.transform(x, y)
+        # transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+        transformer = Transformer.from_crs("EPSG:32618", "EPSG:4326", always_xy=True)
+        return transformer.transform(x, y)[::-1]
 
     @staticmethod
     def distance(point1, point2):
@@ -199,7 +213,7 @@ class GeocentricDataRepresentation(DataRepresentation):
         # Moltiplica il vettore direzionale per la distanza desiderata
         dx *= radius
         dy *= radius
-        return [x1 + dx, y1 + dy]
+        return (round(x1 + dx, 5), round(y1 + dy, 5))
 
     @staticmethod
     def generateCloackedCenter(center, radius):
@@ -237,7 +251,8 @@ class UTMDataRepresentation(DataRepresentation):
 
     def initActivityEndpointList(self, activityCLuster):
         activityEndpointList = []
-        cloackedCenterUTM = utm.from_latlon(*activityCLuster.cloackedCenter)
+        # cloackedCenterUTM = self.transformLatLon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
+        cloackedCenterUTM = utm.from_latlon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         for activityPath in activityCLuster.activityPathList:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
             coords = polyline.decode(values["map.polyline"])
@@ -258,7 +273,7 @@ class UTMDataRepresentation(DataRepresentation):
             distance = 0
             lastUTM = utm.from_latlon(*coords.pop()) ### is decoding output LatLon format?
             if self.utmDistance(lastUTM, cloackedCenterUTM) < activityCLuster.radius: 
-                for coord in coords[::-1]:
+                for coord in coords:
                     beforeUTM = utm.from_latlon(*coord)
                     distance += self.utmDistance(beforeUTM, lastUTM)
                     if self.utmDistance(beforeUTM, cloackedCenterUTM) > activityCLuster.radius:
