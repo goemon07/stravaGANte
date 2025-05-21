@@ -139,7 +139,7 @@ class EPZSearch():
         endpointNodeDict = {}
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
-            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords()), return_dist=True)
+            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node
@@ -277,7 +277,7 @@ class EPZSearch():
         endpointNodeDict = {}
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
-            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords()), return_dist=True)
+            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node
@@ -505,6 +505,7 @@ class EPZSearch():
             latlon = []
             for coords in xy:
                 latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
+            latlon = np.array(latlon)  # Convert to NumPy array
             plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
                     markeredgecolor='k', markersize=15, alpha=0.3)
         
