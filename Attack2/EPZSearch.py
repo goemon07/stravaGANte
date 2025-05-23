@@ -140,6 +140,7 @@ class EPZSearch():
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
             node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
+            print(node)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node

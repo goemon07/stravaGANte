@@ -271,9 +271,10 @@ class UTMDataRepresentation(DataRepresentation):
                 activityEndpointList.append(self.UTMEndpoint(*nextUTM, values["id"], "Start", distance))
             
             distance = 0
-            lastUTM = utm.from_latlon(*coords.pop()) ### is decoding output LatLon format?
+            coordsReverse = coords[::-1]
+            lastUTM = utm.from_latlon(*coordsReverse.pop()) ### is decoding output LatLon format?
             if self.utmDistance(lastUTM, cloackedCenterUTM) < activityCLuster.radius: 
-                for coord in coords:
+                for coord in coordsReverse:
                     beforeUTM = utm.from_latlon(*coord)
                     distance += self.utmDistance(beforeUTM, lastUTM)
                     if self.utmDistance(beforeUTM, cloackedCenterUTM) > activityCLuster.radius:
