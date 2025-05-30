@@ -7,7 +7,7 @@ from geographiclib.geodesic import Geodesic
 import math
 import random
 import utm
-
+from pyproj import Transformer
 
 class DataRepresentation:
     def getActivityEndpointList(self):
@@ -115,12 +115,12 @@ class SphericalDataRepresentation(DataRepresentation):
     def transformLatLon(lat, lon):
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             raise ValueError(f"Invalid latitude or longitude values: lat={lat}, lon={lon}")
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:4978", always_xy=True)
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
         return transformer.transform(lat, lon)
 
     @staticmethod
     def transformToLatLon(x, y, z):
-        transformer = Transformer.from_crs("EPSG:4978", "EPSG:4326", always_xy=True)
+        transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
         #return transformer.transform(x, y, z)
         return transformer.transform(x, y)[::-1]
 
@@ -154,14 +154,14 @@ class GeocentricDataRepresentation(DataRepresentation):
         if any([math.isnan(lat), math.isnan(lon)]):
             print(f"Invalid latitude or longitude values: lat={lat}, lon={lon}")
         # transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:32618", always_xy=True)
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
         t = transformer.transform(lon, lat)
         return t
 
     @staticmethod
     def transformToLatLon(x, y):
         # transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
-        transformer = Transformer.from_crs("EPSG:32618", "EPSG:4326", always_xy=True)
+        transformer = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
         return transformer.transform(x, y)[::-1]
 
     @staticmethod
@@ -228,16 +228,24 @@ class GeocentricDataRepresentation(DataRepresentation):
     
 class UTMDataRepresentation(DataRepresentation):
 
+    def __init__(self):
+        self.tolatlon= Transformer.from_crs("EPSG:3857", "EPSG:4326")
+        self.fromlatlon = Transformer.from_crs("EPSG:4326", "EPSG:3857")
+
     class UTMEndpoint():
-        def __init__(self, easting, northing, zoneNumber, zoneLetter, activityID, endpoint, distance):
-            self.easting = easting
-            self.northing = northing
-            self.zoneNumber = zoneNumber
-            self.zoneLetter = zoneLetter
+        #def __init__(self, easting, northing, zoneNumber, zoneLetter, activityID, endpoint, distance):
+        def __init__(self, x, y, activityID, endpoint, distance):
+            #self.easting = easting
+            #self.northing = northing
+            self.x = x
+            self.y = y
+            #self.zoneNumber = zoneNumber
+            #self.zoneLetter = zoneLetter
             self.activityID = activityID
             self.endpoint = endpoint
             self.distance = distance
-            self.center = [self.easting, self.northing, self.zoneNumber, self.zoneLetter]
+            #self.center = [self.easting, self.northing, self.zoneNumber, self.zoneLetter]
+            self.center = [self.x, self.y]
         
         def __str__(self):
             return f"Endpoint {self.activityID}:{self.endpoint}, Easting: {self.easting}, Northing: {self.northing}, {self.zoneNumber}, '{self.zoneLetter}', with {self.distance} meters hidden"
@@ -246,23 +254,27 @@ class UTMDataRepresentation(DataRepresentation):
             return str(self.activityID)+self.endpoint
         
         def getCoords(self):
-            return [self.easting, self.northing, self.zoneNumber, self.zoneLetter ]
+            #return [self.easting, self.northing, self.zoneNumber, self.zoneLetter ]
+            return [self.x, self.y]
         
 
     def initActivityEndpointList(self, activityCLuster):
         activityEndpointList = []
         # cloackedCenterUTM = self.transformLatLon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
-        cloackedCenterUTM = utm.from_latlon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
+        #cloackedCenterUTM = utm.from_latlon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
+        cloackedCenterUTM = self.fromlatlon.transform(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         for activityPath in activityCLuster.activityPathList:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
             coords = polyline.decode(values["map.polyline"])
             if len(coords) == 0:
                 continue
             distance = 0
-            firstUTM = utm.from_latlon(*coords.pop(0)) ### is decoding output LatLon format? AAAAA
+            #firstUTM = utm.from_latlon(*coords.pop(0)) ### is decoding output LatLon format? AAAAA
+            firstUTM = self.fromlatlon.transform(*coords.pop(0)) ### is decoding output LatLon format? AAAAA
             if self.utmDistance(firstUTM, cloackedCenterUTM) < activityCLuster.radius: 
                 for coord in coords:
-                    nextUTM = utm.from_latlon(*coord)
+                    #nextUTM = utm.from_latlon(*coord)
+                    nextUTM = self.fromlatlon.transform(*coord)
                     distance += self.utmDistance(nextUTM, firstUTM)
                     if self.utmDistance(nextUTM, cloackedCenterUTM) > activityCLuster.radius:
                         break
@@ -272,10 +284,12 @@ class UTMDataRepresentation(DataRepresentation):
             
             distance = 0
             coordsReverse = coords[::-1]
-            lastUTM = utm.from_latlon(*coordsReverse.pop()) ### is decoding output LatLon format?
+            #lastUTM = utm.from_latlon(*coordsReverse.pop()) ### is decoding output LatLon format?
+            lastUTM = self.fromlatlon.transform(*coordsReverse.pop()) ### is decoding output LatLon format?
             if self.utmDistance(lastUTM, cloackedCenterUTM) < activityCLuster.radius: 
                 for coord in coordsReverse:
-                    beforeUTM = utm.from_latlon(*coord)
+                    #beforeUTM = utm.from_latlon(*coord)
+                    beforeUTM = self.fromlatlon.transform(*coord)
                     distance += self.utmDistance(beforeUTM, lastUTM)
                     if self.utmDistance(beforeUTM, cloackedCenterUTM) > activityCLuster.radius:
                         break
@@ -299,8 +313,10 @@ class UTMDataRepresentation(DataRepresentation):
             coords = polyline.decode(values["map.polyline"])
             if len(coords) == 0:
                 continue
-            utm_start = utm.from_latlon(coords[0][0],coords[0][1])
-            utm_end = utm.from_latlon(coords[-1][0],coords[-1][1])
+            #utm_start = utm.from_latlon(coords[0][0],coords[0][1])
+            utm_start = self.fromlatlon.transform(coords[0][0],coords[0][1])
+            #utm_end = utm.from_latlon(coords[-1][0],coords[-1][1])
+            utm_end = self.fromlatlon.transform(coords[-1][0],coords[-1][1])
             activityEndpointList.append(self.UTMEndpoint(*utm_start))
             activityEndpointList.append(self.UTMEndpoint(*utm_end))
         return activityEndpointList

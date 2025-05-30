@@ -17,16 +17,18 @@ import requests
 from requests.exceptions import ConnectionError, ConnectTimeout
 from urllib3.exceptions import ProtocolError
 import seaborn as sns
-
+from pyproj import Transformer
 
 class EPZSearch():
 
     def __init__(self, activityCluster, data_representation = DataRepresentationFactory.UTMDataRepresentationFactory().create_data_representation()):
         self.DataRepresentation = data_representation
         self.EndpointsList = self.DataRepresentation.initActivityEndpointList(activityCluster)
-        self.zoneLetter = self.EndpointsList[0].zoneLetter
-        self.zoneNumber = self.EndpointsList[0].zoneNumber
+        #self.zoneLetter = self.EndpointsList[0].zoneLetter
+        #self.zoneNumber = self.EndpointsList[0].zoneNumber
         self.center = None
+        self.tolatlon= Transformer.from_crs("EPSG:3857", "EPSG:4326")
+        self.fromlatlon= Transformer.from_crs("EPSG:4326", "EPSG:3857")
 
     def printEndpointList(self):
         for endpoint in self.EndpointsList:
@@ -37,14 +39,16 @@ class EPZSearch():
 
     @staticmethod
     def euclidean_distance(point1, point2):
-        return np.linalg.norm(np.array([point1.easting, point1.northing]) - np.array([point2.easting, point2.northing]))
+        #return np.linalg.norm(np.array([point1.easting, point1.northing]) - np.array([point2.easting, point2.northing]))
+        return np.linalg.norm(np.array([point1.x, point1.y]) - np.array([point2.x, point2.y]))
 
     @staticmethod
     def fit_circle(points):
         if len(points) == 0:
             return (0, 0), 0
         
-        coords = np.array([[point.easting, point.northing] for point in points])
+        #coords = np.array([[point.easting, point.northing] for point in points])
+        coords = np.array([[point.x, point.y] for point in points])
         
         def calc_R(xc, yc):
             return np.sqrt((coords[:, 0] - xc)**2 + (coords[:, 1] - yc)**2)
@@ -66,8 +70,10 @@ class EPZSearch():
     def epz_identification(self, tau_converged, tau_disjoint):
         k = 1
         P = self.EndpointsList
+        print(self.EndpointsList)
         max_iteration = 10
-        coords = np.array([[p.easting, p.northing] for p in P])
+        #coords = np.array([[p.easting, p.northing] for p in P])
+        coords = np.array([[p.x, p.y] for p in P])
         clusters = KMeans(n_clusters=k, random_state=0).fit(coords).labels_
         while True:
             prev_centroids = [self.fit_circle([P[i] for i in range(len(P)) if clusters[i] == j])[0] for j in range(k)]
@@ -75,14 +81,16 @@ class EPZSearch():
                 # Assignment step
                 new_clusters = np.zeros(len(P), dtype=int)
                 for i, point in enumerate(P):
-                    distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == l])[0], 0, 'A', '', '', 0)) for l in range(k)]
+                    #distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == l])[0], 0, 'A', '', '', 0)) for l in range(k)]
+                    distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == l])[0], '', '', 0)) for l in range(k)]
                     new_clusters[i] = np.argmin(distances)
                 
                 # Update step
                 new_centroids = [self.fit_circle([P[i] for i in range(len(P)) if new_clusters[i] == j])[0] for j in range(k)]
                 
                 # Check for convergence
-                centroid_changes = [self.euclidean_distance(UTMDataRepresentation.UTMEndpoint(*prev_centroids[i], 0, 'A', '', '', 0), UTMDataRepresentation.UTMEndpoint(*new_centroids[i], 0, 'A', '', '', 0)) for i in range(k)]
+                #centroid_changes = [self.euclidean_distance(UTMDataRepresentation.UTMEndpoint(*prev_centroids[i], 0, 'A', '', '', 0), UTMDataRepresentation.UTMEndpoint(*new_centroids[i], 0, 'A', '', '', 0)) for i in range(k)]
+                centroid_changes = [self.euclidean_distance(UTMDataRepresentation.UTMEndpoint(*prev_centroids[i], '', '', 0), UTMDataRepresentation.UTMEndpoint(*new_centroids[i], '', '', 0)) for i in range(k)]
                 # print(tau_converged, centroid_changes)
                 if all(change < tau_converged for change in centroid_changes):
                     break
@@ -96,7 +104,8 @@ class EPZSearch():
             disjoint = True
             for i in range(k):
                 center, radius = self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == i])
-                if any(self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(center[0], center[1], 0, 'A', '', '', 0)) > tau_disjoint for point in [P[j] for j in range(len(P)) if clusters[j] == i]):
+                #if any(self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(center[0], center[1], 0, 'A', '', '', 0)) > tau_disjoint for point in [P[j] for j in range(len(P)) if clusters[j] == i]):
+                if any(self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(center[0], center[1], '', '', 0)) > tau_disjoint for point in [P[j] for j in range(len(P)) if clusters[j] == i]):
                     disjoint = False
                     break
             
@@ -120,8 +129,11 @@ class EPZSearch():
         # Retrieve the graph
         while True:
             try:
-                app = utm.to_latlon(*epz_circle[0], *self.getZoneInfo())
-                G = ox.graph_from_point(app, 100) #tau_snap)
+                #app = utm.to_latlon(*epz_circle[0], *self.getZoneInfo())
+                print("epz circle", epz_circle[0])
+                print(self.tolatlon.transform(*epz_circle[0]))
+                app = self.tolatlon.transform(*epz_circle[0])
+                G = ox.graph_from_point(app, 500, network_type='all') #tau_snap)
                 break
             except (ConnectTimeout, ConnectionError, ProtocolError, requests.exceptions.RequestException) as e:
                 print(f"Connessione fallita, ritento")
@@ -139,7 +151,8 @@ class EPZSearch():
         endpointNodeDict = {}
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
-            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
+            #node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
+            node, distance = ox.distance.nearest_nodes(G, *self.tolatlon.transform(*endpoint.getCoords())[::-1], return_dist=True)
             print(node)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
@@ -261,10 +274,13 @@ class EPZSearch():
         
         return resultArray
     
-    def retriveSensitiveLocationThroughClusters(self, epz_circle, tau_snap = 50, eps = 30, min_samples = 1):
+    def retriveSensitiveLocationThroughClusters(self, epz_circle, tau_snap = 500, eps = 30, min_samples = 1):
         
         # Retrieve the graph
-        G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()), tau_snap)
+        #G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()), tau_snap)
+        print("epz circle", epz_circle[0])
+        print(self.tolatlon.transform(*epz_circle[0]))
+        G = ox.graph_from_point(self.tolatlon.transform(*epz_circle[0]), tau_snap, network_type='all')
 
         # Prepare the graph
         G = ox.truncate.largest_component(G)
@@ -278,7 +294,8 @@ class EPZSearch():
         endpointNodeDict = {}
         endpointDistanceDict = {}
         for endpoint in self.EndpointsList:
-            node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
+            #node, distance = ox.distance.nearest_nodes(G, *utm.to_latlon(*endpoint.getCoords())[::-1], return_dist=True)
+            node, distance = ox.distance.nearest_nodes(G, *self.tolatlon.transform(*endpoint.getCoords())[::-1], return_dist=True)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node
@@ -289,7 +306,8 @@ class EPZSearch():
         
      ####         Identifing entry gates Y          ####
         
-        node_coords = [utm.from_latlon(G.nodes[node[0]]['y'], G.nodes[node[0]]['x'])[:2] for node in nodeList]
+        #node_coords = [utm.from_latlon(G.nodes[node[0]]['y'], G.nodes[node[0]]['x'])[:2] for node in nodeList]
+        node_coords = [self.fromlatlon.transform(G.nodes[node[0]]['y'], G.nodes[node[0]]['x'])[:2] for node in nodeList]
     
         X = np.array(node_coords)
         if len(X) == 0:
@@ -458,7 +476,7 @@ class EPZSearch():
                 break
 
         # Step 3: Plot the OSMnx graph
-        fig, ax = ox.plot_graph(G, show=False, close=False)
+        fig, ax = ox.plot_graph(G, show=True, close=True)
         
         # Step 4: Create a scatter plot
         scatter = ax.scatter(node_x, node_y, c=node_values, cmap='plasma', s=100, alpha=0.75, edgecolor='k', zorder=5)
@@ -487,7 +505,7 @@ class EPZSearch():
                 break
 
         # Step 3: Plot the OSMnx graph
-        fig, ax = ox.plot_graph(G, show=False, close=False)
+        fig, ax = ox.plot_graph(G, show=True, close=True)
 
         
         # Plot the clusters
@@ -505,7 +523,8 @@ class EPZSearch():
             xy = X[class_member_mask]
             latlon = []
             for coords in xy:
-                latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
+                #latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
+                latlon.append(self.tolatlon.transform(*coords))
             latlon = np.array(latlon)  # Convert to NumPy array
             plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
                     markeredgecolor='k', markersize=15, alpha=0.3)
@@ -538,7 +557,8 @@ class EPZSearch():
             xy = X[class_member_mask]
             latlon = []
             for coords in xy:
-                latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
+                #latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
+                latlon.append(self.tolatlon.transform(*coords))
             latlon = np.array(latlon)
             plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
                     markeredgecolor='k', markersize=14)
