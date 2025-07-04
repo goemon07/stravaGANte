@@ -19,6 +19,18 @@ from urllib3.exceptions import ProtocolError
 import seaborn as sns
 from pyproj import Transformer
 
+import networkx as nx
+import pandas as pd
+import numpy as np
+import time
+from sklearn.cluster import DBSCAN
+from requests.exceptions import RequestException, ConnectionError
+from urllib3.exceptions import ProtocolError
+from requests import exceptions as req_exc
+import osmnx as ox
+
+from geopy.distance import distance as geopy_distance
+
 class EPZSearch():
 
     def __init__(self, activityCluster, data_representation = DataRepresentationFactory.UTMDataRepresentationFactory().create_data_representation()):
@@ -42,12 +54,10 @@ class EPZSearch():
         #return np.linalg.norm(np.array([point1.easting, point1.northing]) - np.array([point2.easting, point2.northing]))
         return np.linalg.norm(np.array([point1.x, point1.y]) - np.array([point2.x, point2.y]))
 
-    @staticmethod
-    def fit_circle(points):
+    def fit_circle(self, points):
         if len(points) == 0:
             return (0, 0), 0
         
-        #coords = np.array([[point.easting, point.northing] for point in points])
         coords = np.array([[point.x, point.y] for point in points])
         
         def calc_R(xc, yc):
@@ -58,19 +68,30 @@ class EPZSearch():
             return ((Ri - Ri.mean())**2).sum()
             
         center_estimate = np.mean(coords, axis=0)
-        # Adding constraints and bounds
-        bounds = [(np.min(coords[:, 0]), np.max(coords[:, 0])), (np.min(coords[:, 1]), np.max(coords[:, 1]))]
-    
+        bounds = [(np.min(coords[:, 0]), np.max(coords[:, 0])), 
+                (np.min(coords[:, 1]), np.max(coords[:, 1]))]
+
         center = minimize(f_2, center_estimate, bounds=bounds, options={'maxiter': 10})
-        center = center.x
-        Ri = calc_R(*center)
-        radius = Ri.mean()
-        return (center[0], center[1]), radius
+        center_xy = center.x  # still in EPSG:3857
+
+        # Convert center and points to lat/lon
+        center_latlon = self.tolatlon.transform(center_xy[0], center_xy[1])
+        point_latlon = [self.tolatlon.transform(p.x, p.y) for p in points]
+
+        # Geodesic radius: max distance from center to any point
+        radius = max(
+            geopy_distance(center_latlon, pt).meters
+            for pt in point_latlon
+        )
+
+        #print(f"    📍 Center (lat/lon): {center_latlon}, Radius: {radius:.2f} m")
+        
+        return (center_xy[0], center_xy[1]), radius
 
     def epz_identification(self, tau_converged, tau_disjoint):
         k = 1
         P = self.EndpointsList
-        print(self.EndpointsList)
+        print(self.EndpointsList[0])
         max_iteration = 10
         #coords = np.array([[p.easting, p.northing] for p in P])
         coords = np.array([[p.x, p.y] for p in P])
@@ -122,6 +143,123 @@ class EPZSearch():
             epz_results.append((center, radius, cluster_points))
         
         return epz_results
+
+    def retriveSensitiveLocationv2(self, epz_circle, tau_snap = 100, eps = 30, min_samples = 1):
+    
+        # Retrieve the graph
+        while True:
+            try:
+                print("epz circle", epz_circle[0])
+                app = self.tolatlon.transform(*epz_circle[0])
+                G = ox.graph_from_point(app, 500, network_type='all')
+                break
+            except (req_exc.ConnectTimeout, ConnectionError, ProtocolError, req_exc.RequestException):
+                print(f"Connessione fallita, ritento")
+            raise Exception(f"Impossibile connettersi")
+
+        # Prepare the graph
+        G = ox.truncate.largest_component(G, strongly=True)
+
+        # Calculate nearest nodes for each endpoint
+        nodeList = []
+        endpointNodeDict = {}
+        endpointDistanceDict = {}
+        for endpoint in self.EndpointsList:
+            projected_coords = self.tolatlon.transform(*endpoint.getCoords())
+            node, distance = ox.distance.nearest_nodes(G, *projected_coords[::-1], return_dist=True)
+            print(node)
+            if distance < tau_snap:
+                nodeList.append((node, endpoint.distance, endpoint))
+                endpointNodeDict[endpoint.getID()] = node
+                endpointDistanceDict[endpoint.getID()] = endpoint.distance
+
+        all_nodes = list(G.nodes())
+
+        # Distance dataframe: rows = endpoint IDs, cols = all graph nodes
+        distances_df = pd.DataFrame(index=[node[2].getID() for node in nodeList], columns=all_nodes)
+
+        for nodeArr in nodeList:
+            node = nodeArr[0]
+            lengths, paths = nx.single_source_dijkstra(G, source=node, weight='length')
+            for target_node, distance in lengths.items():
+                distances_df.at[nodeArr[2].getID(), target_node] = distance
+        distances_df = distances_df.dropna(axis=1, how='all')
+
+        #### Identifying entry gates Y ####
+        node_coords = [
+            self.fromlatlon.transform(G.nodes[node[0]]['y'], G.nodes[node[0]]['x'])
+            for node in nodeList
+        ]
+
+        X = np.array(node_coords)
+        if len(X) == 0:
+            print('No cords')
+            return None
+
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+        db = dbscan.fit(X)
+        labels = db.labels_
+        print('Labels: ', labels)
+        n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+        print(f'Estimated number of clusters: {n_clusters}')
+
+        clustered_nodes = pd.DataFrame({
+            'node': [node[2].getID() for node in nodeList],
+            'distance': [node[1] for node in nodeList],
+            'x': X[:, 0],
+            'y': X[:, 1],
+            'cluster': labels
+        })
+
+        #### Discarding Outliers ####
+        max_distance_df = distances_df.max(axis=1).reset_index()
+        max_distance_df.columns = ['node', 'max_distance']
+
+        cluster_stats = clustered_nodes.groupby('cluster')['distance'].agg(['mean', 'std']).reset_index()
+        cluster_stats.columns = ['cluster', 'mean_distance', 'std_distance']
+        cluster_stats['up_threshold'] = cluster_stats['mean_distance'] + 3 * cluster_stats['std_distance']
+        cluster_stats['down_threshold'] = cluster_stats['mean_distance'] - 3 * cluster_stats['std_distance']
+
+        cluster_stats = cluster_stats.merge(clustered_nodes, on="cluster")
+        cluster_stats = cluster_stats.merge(max_distance_df, on="node")
+
+        cluster_stats['is_outlier'] = (cluster_stats['distance'] < cluster_stats['down_threshold']) | \
+                                    (cluster_stats['distance'] > cluster_stats['max_distance'])
+
+        filtered_nodes = cluster_stats[~cluster_stats['is_outlier']]
+        nodes_to_keep = filtered_nodes['node'].tolist()
+        filtered_distances_df = distances_df.loc[nodes_to_keep]
+
+        #### Debug: Finding node of actual POI ####
+        actualPOI = [11.917602, 45.426466]  # lon, lat
+        actualPOI_projected = self.fromlatlon.transform(actualPOI[1], actualPOI[0])
+        nodePOI, distancePOI = ox.distance.nearest_nodes(G, *actualPOI_projected[::-1], return_dist=True)
+
+        #### Finding the location ####
+        positive_differences = filtered_distances_df.copy()
+        for node, row in filtered_distances_df.iterrows():
+            distance = endpointDistanceDict[node]
+            for col in filtered_distances_df.columns:
+                diff = row[col] - distance
+                positive_differences.at[node, col] = pow(abs(diff), 2)
+
+        column_sums = positive_differences.mean(axis=0).to_frame()
+        column_sums.columns = ['distances']
+        column_sums['distances'] = column_sums['distances'].astype(float)
+        column_sums = column_sums.sort_values(by='distances')
+
+        min_sum = column_sums.min()
+        min_node = column_sums.idxmin().loc[column_sums.min().idxmin()]
+
+        resultArray = []
+        for index, row in column_sums.head(5).iterrows():
+            element = G.nodes[index]
+            element["distances"] = row['distances']
+            resultArray.append(element)
+
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
+
+        return resultArray
 
 
     def retriveSensitiveLocation(self, epz_circle, tau_snap = 50, eps = 30, min_samples = 1):
@@ -250,11 +388,10 @@ class EPZSearch():
             distance = endpointDistanceDict[node]
             for col in filtered_distances_df.columns:
                 diff = row[col] - distance
-                positive_differences.at[node, col] = abs(diff)
-
+                positive_differences.at[node, col] = pow(abs(diff), 2)
 
         # Sum all rows grouped by columns
-        column_sums = positive_differences.sum(axis=0)
+        column_sums = positive_differences.mean(axis=0)
         column_sums = column_sums.to_frame()
         column_sums.columns = ['distances']
         column_sums['distances'] = column_sums['distances'].astype(float)
@@ -273,8 +410,9 @@ class EPZSearch():
         self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
         
         return resultArray
+
     
-    def retriveSensitiveLocationThroughClusters(self, epz_circle, tau_snap = 500, eps = 30, min_samples = 1):
+    def retriveSensitiveLocationThroughClusters(self, epz_circle, tau_snap=50, eps=30, min_samples=1):
         
         # Retrieve the graph
         #G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()), tau_snap)
