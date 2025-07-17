@@ -248,7 +248,7 @@ class UTMDataRepresentation(DataRepresentation):
             self.center = [self.x, self.y]
         
         def __str__(self):
-            return f"Endpoint {self.activityID}:{self.endpoint}, Easting: {self.easting}, Northing: {self.northing}, {self.zoneNumber}, '{self.zoneLetter}', with {self.distance} meters hidden"
+            return f"Endpoint {self.activityID}:{self.endpoint}, Easting: {self.x}, Northing: {self.y}, with {self.distance} meters hidden"
 
         def getID(self):
             return str(self.activityID)+self.endpoint
@@ -263,6 +263,7 @@ class UTMDataRepresentation(DataRepresentation):
         # cloackedCenterUTM = self.transformLatLon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         #cloackedCenterUTM = utm.from_latlon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         cloackedCenterUTM = self.fromlatlon.transform(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
+        print("cloacked center ", cloackedCenterUTM)
         for activityPath in activityCLuster.activityPathList:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
             coords = polyline.decode(values["map.polyline"])
@@ -285,7 +286,7 @@ class UTMDataRepresentation(DataRepresentation):
             distance = 0
             coordsReverse = coords[::-1]
             #lastUTM = utm.from_latlon(*coordsReverse.pop()) ### is decoding output LatLon format?
-            lastUTM = self.fromlatlon.transform(*coordsReverse.pop()) ### is decoding output LatLon format?
+            lastUTM = self.fromlatlon.transform(*coordsReverse.pop(0)) ### is decoding output LatLon format?
             if self.utmDistance(lastUTM, cloackedCenterUTM) < activityCLuster.radius: 
                 for coord in coordsReverse:
                     #beforeUTM = utm.from_latlon(*coord)
