@@ -30,6 +30,7 @@ from requests import exceptions as req_exc
 import osmnx as ox
 
 from geopy.distance import distance as geopy_distance
+import contextily as ctx
 
 class EPZSearch():
 
@@ -91,9 +92,7 @@ class EPZSearch():
     def epz_identification(self, tau_converged, tau_disjoint):
         k = 1
         P = self.EndpointsList
-        print(self.EndpointsList[0])
         max_iteration = 10
-        #coords = np.array([[p.easting, p.northing] for p in P])
         coords = np.array([[p.x, p.y] for p in P])
         clusters = KMeans(n_clusters=k, random_state=0).fit(coords).labels_
         while True:
@@ -144,12 +143,11 @@ class EPZSearch():
         
         return epz_results
 
-    def retriveSensitiveLocationv2(self, epz_circle, tau_snap = 100, eps = 30, min_samples = 1):
+    def retriveSensitiveLocationv2(self, epz_circle, realPOI, tau_snap = 100, eps = 30, min_samples = 1):
     
         # Retrieve the graph
         while True:
             try:
-                print("epz circle", epz_circle[0])
                 app = self.tolatlon.transform(*epz_circle[0])
                 G = ox.graph_from_point(app, 500, network_type='all')
                 break
@@ -167,7 +165,6 @@ class EPZSearch():
         for endpoint in self.EndpointsList:
             projected_coords = self.tolatlon.transform(*endpoint.getCoords())
             node, distance = ox.distance.nearest_nodes(G, *projected_coords[::-1], return_dist=True)
-            print(node)
             if distance < tau_snap:
                 nodeList.append((node, endpoint.distance, endpoint))
                 endpointNodeDict[endpoint.getID()] = node
@@ -199,9 +196,9 @@ class EPZSearch():
         dbscan = DBSCAN(eps=eps, min_samples=min_samples)
         db = dbscan.fit(X)
         labels = db.labels_
-        print('Labels: ', labels)
+        # print('Labels: ', labels)
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        print(f'Estimated number of clusters: {n_clusters}')
+        print(f'            Estimated number of clusters: {n_clusters}')
 
         clustered_nodes = pd.DataFrame({
             'node': [node[2].getID() for node in nodeList],
@@ -248,16 +245,19 @@ class EPZSearch():
         column_sums['distances'] = column_sums['distances'].astype(float)
         column_sums = column_sums.sort_values(by='distances')
 
-        min_sum = column_sums.min()
-        min_node = column_sums.idxmin().loc[column_sums.min().idxmin()]
-
+        min_sum = column_sums['distances'].min()
+        if column_sums['distances'].isna().all():
+            min_node = None
+        else:
+            min_node = column_sums['distances'].idxmin(skipna=True)
+        
         resultArray = []
         for index, row in column_sums.head(5).iterrows():
             element = G.nodes[index]
             element["distances"] = row['distances']
             resultArray.append(element)
 
-        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels, self.tolatlon.transform(*epz_circle[0]), realPOI)
 
         return resultArray
 
@@ -623,7 +623,7 @@ class EPZSearch():
         plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
         plt.show()
 
-    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, X, labels):
+    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, X, labels, epz_circle, realPOI):
         column_sums = column_sums.sort_values(by='distances')
 
         # Step 2: Extract node coordinates
@@ -642,41 +642,64 @@ class EPZSearch():
             if value > minValue*2:
                 break
 
-        # Step 3: Plot the OSMnx graph
-        fig, ax = ox.plot_graph(G, show=True, close=True)
+        # Step 3: Plot the OSMnx graph on a real map (with basemap)
+        fig, ax = ox.plot_graph(G, show=False, close=False, bgcolor='w', node_color='gray', edge_color='gray', edge_linewidth=0.8)
+        # Transform node coordinates to lat/lon for basemap
+        # Get all node coordinates in EPSG:4326
+        node_lons = [G.nodes[n]['x'] for n in G.nodes]
+        node_lats = [G.nodes[n]['y'] for n in G.nodes]
+        # Set extent for basemap
+        ax.set_xlim(min(node_lons), max(node_lons))
+        ax.set_ylim(min(node_lats), max(node_lats))
+        ctx.add_basemap(ax, source=ctx.providers.OpenStreetMap.Mapnik, crs='EPSG:4326', zoom=19)
+
+        # Plot the realPOI as a green dot
+        if realPOI is not None:
+            # Transform realPOI and epz_circle to EPSG:4326 if needed
+            if realPOI is not None:
+                realPOI_lon, realPOI_lat = realPOI
+                ax.plot(realPOI_lon, realPOI_lat, 'go', markersize=8, alpha=0.8, label='RealPOI', zorder=10)
+        # Plot the EPZ center as a blue dot
+        if epz_circle is not None:
+            epz_lon, epz_lat = self.tolatlon.transform(epz_circle[0], epz_circle[1])
+            ax.plot(epz_lon, epz_lat, 'bo', markersize=8, alpha=0.8, label='EPZ center', zorder=10)
+        # Add legend only if at least one is present
+        if realPOI is not None or epz_circle is not None:
+            ax.legend()
+        fig.show()
 
         
         # Plot the clusters
 
-        unique_labels = set(labels)
-        colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
+        # unique_labels = set(labels)
+        # colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
 
-        for k, col in zip(unique_labels, colors):
-            if k == -1:
-                # Black used for noise.
-                col = [0, 0, 0, 1]
+        # for k, col in zip(unique_labels, colors):
+        #     if k == -1:
+        #         # Black used for noise.
+        #         col = [0, 0, 0, 1]
 
-            class_member_mask = (labels == k)
+        #     class_member_mask = (labels == k)
 
-            xy = X[class_member_mask]
-            latlon = []
-            for coords in xy:
-                #latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
-                latlon.append(self.tolatlon.transform(*coords))
-            latlon = np.array(latlon)  # Convert to NumPy array
-            plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
-                    markeredgecolor='k', markersize=15, alpha=0.3)
+        #     xy = X[class_member_mask]
+        #     latlon = []
+        #     for coords in xy:
+        #         #latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
+        #         latlon.append(self.tolatlon.transform(*coords))
+        #     latlon = np.array(latlon)  # Convert to NumPy array
+        #     plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
+        #             markeredgecolor='k', markersize=15, alpha=0.3)
         
-        # Step 4: Create a scatter plot
-        scatter = ax.scatter(node_x, node_y, c=node_values, cmap='plasma', s=100, alpha=0.75, edgecolor='k', zorder=5)
-        plt.colorbar(scatter, ax=ax, label='Sum of Positive Differences')
+        # # Step 4: Create a scatter plot
+        # scatter = ax.scatter(node_x, node_y, c=node_values, cmap='plasma', s=100, alpha=0.75, edgecolor='k', zorder=5)
+        # plt.colorbar(scatter, ax=ax, label='Sum of Positive Differences')
         
-        if self.center is not None:
-            print('center', self.center)
-            plt.plot(self.center[1], self.center[0], 'ro', markersize=18, alpha=0.6)
+        # if self.center is not None:
+        #     print('center', self.center)
+        #     plt.plot(self.center[1], self.center[0], 'ro', markersize=18, alpha=0.6)
             
-        plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
-        plt.show()
+        # plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
+        # plt.show()
 
 
     def plotClusters(self, X, labels):

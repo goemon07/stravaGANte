@@ -263,7 +263,6 @@ class UTMDataRepresentation(DataRepresentation):
         # cloackedCenterUTM = self.transformLatLon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         #cloackedCenterUTM = utm.from_latlon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         cloackedCenterUTM = self.fromlatlon.transform(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
-        print("cloacked center ", cloackedCenterUTM)
         for activityPath in activityCLuster.activityPathList:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
             coords = polyline.decode(values["map.polyline"])
