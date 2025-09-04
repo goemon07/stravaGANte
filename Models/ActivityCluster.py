@@ -88,6 +88,7 @@ class ActivityCluster():
             self.center = newCenter[list(newCenter)[0]]
         else:
             self.cloackedCenter = newCenter[list(newCenter)[0]]
+            self.cloackedRadius = newCenter[list(newCenter)[1]]
         with open(self.ActivityClusterListPath, 'r+') as jsonFile:
             jsonData = json.load(jsonFile)
             for activityClusterEntry in jsonData["ActivityClusterList"]:

@@ -31,6 +31,7 @@ import osmnx as ox
 
 from geopy.distance import distance as geopy_distance
 import contextily as ctx
+from matplotlib.patches import Ellipse
 
 class EPZSearch():
 
@@ -52,25 +53,29 @@ class EPZSearch():
 
     @staticmethod
     def euclidean_distance(point1, point2):
-        #return np.linalg.norm(np.array([point1.easting, point1.northing]) - np.array([point2.easting, point2.northing]))
+        if isinstance(point1, list) or isinstance(point1, tuple):
+            point1 = type('Point', (), {'x': point1[0], 'y': point1[1]})()
+        if isinstance(point2, list) or isinstance(point2, tuple):
+            point2 = type('Point', (), {'x': point2[0], 'y': point2[1]})()
+
         return np.linalg.norm(np.array([point1.x, point1.y]) - np.array([point2.x, point2.y]))
 
     def fit_circle(self, points):
         if len(points) == 0:
             return (0, 0), 0
-        
+
         coords = np.array([[point.x, point.y] for point in points])
-        
+
         def calc_R(xc, yc):
             return np.sqrt((coords[:, 0] - xc)**2 + (coords[:, 1] - yc)**2)
-        
+
         def f_2(c):
             Ri = calc_R(*c)
             return ((Ri - Ri.mean())**2).sum()
-            
+
         center_estimate = np.mean(coords, axis=0)
-        bounds = [(np.min(coords[:, 0]), np.max(coords[:, 0])), 
-                (np.min(coords[:, 1]), np.max(coords[:, 1]))]
+        bounds = [(np.min(coords[:, 0]), np.max(coords[:, 0])),
+                  (np.min(coords[:, 1]), np.max(coords[:, 1]))]
 
         center = minimize(f_2, center_estimate, bounds=bounds, options={'maxiter': 10})
         center_xy = center.x  # still in EPSG:3857
@@ -79,15 +84,24 @@ class EPZSearch():
         center_latlon = self.tolatlon.transform(center_xy[0], center_xy[1])
         point_latlon = [self.tolatlon.transform(p.x, p.y) for p in points]
 
-        # Geodesic radius: max distance from center to any point
-        radius = max(
+        # Compute geodesic distances from center to each point
+        distances = np.array([
             geopy_distance(center_latlon, pt).meters
             for pt in point_latlon
-        )
+        ])
 
-        #print(f"    📍 Center (lat/lon): {center_latlon}, Radius: {radius:.2f} m")
-        
-        return (center_xy[0], center_xy[1]), radius
+        # Discrete radius values: 200, 400, ..., 1600 meters
+        possible_radii = np.arange(200, 1601, 200)
+        n_points = len(points)
+        min_required = int(np.ceil(0.9 * n_points))
+
+        selected_radius = possible_radii[-1]  # Default to largest if none fit
+        for r in possible_radii:
+            if np.sum(distances <= r) >= min_required:
+                selected_radius = r
+                break
+
+        return (center_xy[0], center_xy[1]), selected_radius
 
     def epz_identification(self, tau_converged, tau_disjoint):
         k = 1
@@ -101,7 +115,6 @@ class EPZSearch():
                 # Assignment step
                 new_clusters = np.zeros(len(P), dtype=int)
                 for i, point in enumerate(P):
-                    #distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == l])[0], 0, 'A', '', '', 0)) for l in range(k)]
                     distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == l])[0], '', '', 0)) for l in range(k)]
                     new_clusters[i] = np.argmin(distances)
                 
@@ -109,9 +122,7 @@ class EPZSearch():
                 new_centroids = [self.fit_circle([P[i] for i in range(len(P)) if new_clusters[i] == j])[0] for j in range(k)]
                 
                 # Check for convergence
-                #centroid_changes = [self.euclidean_distance(UTMDataRepresentation.UTMEndpoint(*prev_centroids[i], 0, 'A', '', '', 0), UTMDataRepresentation.UTMEndpoint(*new_centroids[i], 0, 'A', '', '', 0)) for i in range(k)]
                 centroid_changes = [self.euclidean_distance(UTMDataRepresentation.UTMEndpoint(*prev_centroids[i], '', '', 0), UTMDataRepresentation.UTMEndpoint(*new_centroids[i], '', '', 0)) for i in range(k)]
-                # print(tau_converged, centroid_changes)
                 if all(change < tau_converged for change in centroid_changes):
                     break
                 
@@ -124,7 +135,6 @@ class EPZSearch():
             disjoint = True
             for i in range(k):
                 center, radius = self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == i])
-                #if any(self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(center[0], center[1], 0, 'A', '', '', 0)) > tau_disjoint for point in [P[j] for j in range(len(P)) if clusters[j] == i]):
                 if any(self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(center[0], center[1], '', '', 0)) > tau_disjoint for point in [P[j] for j in range(len(P)) if clusters[j] == i]):
                     disjoint = False
                     break
@@ -143,7 +153,7 @@ class EPZSearch():
         
         return epz_results
 
-    def retriveSensitiveLocationv2(self, epz_circle, realPOI, tau_snap = 100, eps = 30, min_samples = 1):
+    def retriveSensitiveLocationv2(self, epz_circle, realPOI, realRadius, cluster_num, tau_snap = 100, eps = 30, min_samples = 1):
     
         # Retrieve the graph
         while True:
@@ -190,7 +200,7 @@ class EPZSearch():
 
         X = np.array(node_coords)
         if len(X) == 0:
-            print('No cords')
+            # print('No cords')
             return None
 
         dbscan = DBSCAN(eps=eps, min_samples=min_samples)
@@ -198,7 +208,7 @@ class EPZSearch():
         labels = db.labels_
         # print('Labels: ', labels)
         n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        print(f'            Estimated number of clusters: {n_clusters}')
+        # print(f'            Estimated number of clusters: {n_clusters}')
 
         clustered_nodes = pd.DataFrame({
             'node': [node[2].getID() for node in nodeList],
@@ -257,12 +267,12 @@ class EPZSearch():
             element["distances"] = row['distances']
             resultArray.append(element)
 
-        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels, self.tolatlon.transform(*epz_circle[0]), realPOI)
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels, self.tolatlon.transform(*epz_circle[0]), epz_circle[1], tuple(realPOI), realRadius, cluster_num)
 
         return resultArray
 
 
-    def retriveSensitiveLocation(self, epz_circle, tau_snap = 50, eps = 30, min_samples = 1):
+    def retriveSensitiveLocation(self, epz_circle, realPOI, tau_snap = 50, eps = 30, min_samples = 1):
         
         # Retrieve the graph
         while True:
@@ -407,12 +417,13 @@ class EPZSearch():
             element["distances"] = row['distances']
             resultArray.append(element)
 
-        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
+        # self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels, self.tolatlon.transform(*epz_circle[0]), tuple(realPOI))
         
         return resultArray
 
     
-    def retriveSensitiveLocationThroughClusters(self, epz_circle, tau_snap=50, eps=30, min_samples=1):
+    def retriveSensitiveLocationThroughClusters(self, epz_circle, realPOI, tau_snap=50, eps=30, min_samples=1):
         
         # Retrieve the graph
         #G = ox.graph_from_point(utm.to_latlon(*epz_circle[0], *self.getZoneInfo()), tau_snap)
@@ -553,7 +564,8 @@ class EPZSearch():
             element["distances"] = row['distances']
             resultArray.append(element)
 
-        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
+        # self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels)
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels, self.tolatlon.transform(*epz_circle[0]), tuple(realPOI))
         
         return resultArray
     
@@ -623,7 +635,7 @@ class EPZSearch():
         plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
         plt.show()
 
-    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, X, labels, epz_circle, realPOI):
+    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, X, labels, epz_circle, epz_radius, realPOI, realRadius, cluster_num):
         column_sums = column_sums.sort_values(by='distances')
 
         # Step 2: Extract node coordinates
@@ -644,88 +656,59 @@ class EPZSearch():
 
         # Step 3: Plot the OSMnx graph on a real map (with basemap)
         fig, ax = ox.plot_graph(G, show=False, close=False, bgcolor='w', node_color='gray', edge_color='gray', edge_linewidth=0.8)
+
         # Transform node coordinates to lat/lon for basemap
         # Get all node coordinates in EPSG:4326
         node_lons = [G.nodes[n]['x'] for n in G.nodes]
         node_lats = [G.nodes[n]['y'] for n in G.nodes]
-        # Set extent for basemap
-        ax.set_xlim(min(node_lons), max(node_lons))
-        ax.set_ylim(min(node_lats), max(node_lats))
-        ctx.add_basemap(ax, source=ctx.providers.OpenStreetMap.Mapnik, crs='EPSG:4326', zoom=19)
 
         # Plot the realPOI as a green dot
+        extra_lons = []
+        extra_lats = []
         if realPOI is not None:
-            # Transform realPOI and epz_circle to EPSG:4326 if needed
-            if realPOI is not None:
-                realPOI_lon, realPOI_lat = realPOI
-                ax.plot(realPOI_lon, realPOI_lat, 'go', markersize=8, alpha=0.8, label='RealPOI', zorder=10)
+            realPOI_lat, realPOI_lon = realPOI
+            ax.plot(realPOI_lon, realPOI_lat, 'go', markersize=8, alpha=0.8, label=f'RealPOI r={realRadius}m', zorder=10)
+            # Convert radius in meters to degrees for latitude and longitude
+            radius_deg_lat = realRadius / 111320.0
+            radius_deg_lon = realRadius / (111320.0 * np.cos(np.deg2rad(realPOI_lat)))
+            # Use an ellipse to represent the circle correctly
+            ellipse = Ellipse((realPOI_lon, realPOI_lat), 2*radius_deg_lon, 2*radius_deg_lat, edgecolor='green', fill=False, linewidth=2, alpha=0.5, zorder=9)
+            ax.add_patch(ellipse)
+            extra_lons.extend([realPOI_lon - radius_deg_lon, realPOI_lon + radius_deg_lon])
+            extra_lats.extend([realPOI_lat - radius_deg_lat, realPOI_lat + radius_deg_lat])
+
         # Plot the EPZ center as a blue dot
         if epz_circle is not None:
-            epz_lon, epz_lat = self.tolatlon.transform(epz_circle[0], epz_circle[1])
-            ax.plot(epz_lon, epz_lat, 'bo', markersize=8, alpha=0.8, label='EPZ center', zorder=10)
+            epz_lat, epz_lon = epz_circle
+            ax.plot(epz_lon, epz_lat, 'bo', markersize=8, alpha=0.8, label=f'EPZ r={epz_radius}m', zorder=10)
+            # Convert radius in meters to degrees for latitude and longitude
+            radius_deg_lat = epz_radius / 111320.0
+            radius_deg_lon = epz_radius / (111320.0 * np.cos(np.deg2rad(epz_lat)))
+            # Use an ellipse to represent the circle correc
+            ellipse = Ellipse((epz_lon, epz_lat), 2*radius_deg_lon, 2*radius_deg_lat, edgecolor='blue', fill=False, linewidth=2, alpha=0.5, zorder=9)
+            ax.add_patch(ellipse)
+            extra_lons.extend([epz_lon - radius_deg_lon, epz_lon + radius_deg_lon])
+            extra_lats.extend([epz_lat - radius_deg_lat, epz_lat + radius_deg_lat])
+
+        # Set extent for basemap, including extra points
+        all_lons = node_lons + extra_lons
+        all_lats = node_lats + extra_lats
+
+        # Calculate min/max for both axes
+        min_lon, max_lon = min(all_lons), max(all_lons)
+        min_lat, max_lat = min(all_lats), max(all_lats)
+
+        # Find the center and the largest span
+        center_lon = (min_lon + max_lon) / 2
+        center_lat = (min_lat + max_lat) / 2
+        span = max(max_lon - min_lon, max_lat - min_lat)
+
+        # Expand both axes equally from the center
+        ax.set_xlim(center_lon - span / 2, center_lon + span / 2)
+        ax.set_ylim(center_lat - span / 2, center_lat + span / 2)
+        ctx.add_basemap(ax, source=ctx.providers.OpenStreetMap.Mapnik, crs='EPSG:4326')  # omit zoom for auto
+
         # Add legend only if at least one is present
         if realPOI is not None or epz_circle is not None:
-            ax.legend()
+            ax.legend(title=f"ACTIVITY {cluster_num}")
         fig.show()
-
-        
-        # Plot the clusters
-
-        # unique_labels = set(labels)
-        # colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
-
-        # for k, col in zip(unique_labels, colors):
-        #     if k == -1:
-        #         # Black used for noise.
-        #         col = [0, 0, 0, 1]
-
-        #     class_member_mask = (labels == k)
-
-        #     xy = X[class_member_mask]
-        #     latlon = []
-        #     for coords in xy:
-        #         #latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
-        #         latlon.append(self.tolatlon.transform(*coords))
-        #     latlon = np.array(latlon)  # Convert to NumPy array
-        #     plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
-        #             markeredgecolor='k', markersize=15, alpha=0.3)
-        
-        # # Step 4: Create a scatter plot
-        # scatter = ax.scatter(node_x, node_y, c=node_values, cmap='plasma', s=100, alpha=0.75, edgecolor='k', zorder=5)
-        # plt.colorbar(scatter, ax=ax, label='Sum of Positive Differences')
-        
-        # if self.center is not None:
-        #     print('center', self.center)
-        #     plt.plot(self.center[1], self.center[0], 'ro', markersize=18, alpha=0.6)
-            
-        # plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
-        # plt.show()
-
-
-    def plotClusters(self, X, labels):
-        # Plot the clusters
-
-        unique_labels = set(labels)
-        colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
-
-        for k, col in zip(unique_labels, colors):
-            if k == -1:
-                # Black used for noise.
-                col = [0, 0, 0, 1]
-
-            class_member_mask = (labels == k)
-
-            xy = X[class_member_mask]
-            latlon = []
-            for coords in xy:
-                #latlon.append(utm.to_latlon(*coords, *self.getZoneInfo()))
-                latlon.append(self.tolatlon.transform(*coords))
-            latlon = np.array(latlon)
-            plt.plot(latlon[:, 0], latlon[:, 1], 'o', markerfacecolor=tuple(col),
-                    markeredgecolor='k', markersize=14)
-        
-        plt.title(f'Estimated number of clusters: {len(set(labels)) - (1 if -1 in labels else 0)}')
-        plt.show()
-
-    def getZoneInfo(self):
-        return [self.zoneNumber, self.zoneLetter]
