@@ -267,7 +267,7 @@ class EPZSearch():
             element["distances"] = row['distances']
             resultArray.append(element)
 
-        self.plot_heatmap_clusters_over_osmnx(G, column_sums, X, labels, self.tolatlon.transform(*epz_circle[0]), epz_circle[1], tuple(realPOI), realRadius, cluster_num)
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, resultArray, self.tolatlon.transform(*epz_circle[0]), epz_circle[1], tuple(realPOI), realRadius, cluster_num)
 
         return resultArray
 
@@ -635,7 +635,7 @@ class EPZSearch():
         plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
         plt.show()
 
-    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, X, labels, epz_circle, epz_radius, realPOI, realRadius, cluster_num):
+    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, sensitive_locations, epz_circle, epz_radius, realPOI, realRadius, cluster_num):
         column_sums = column_sums.sort_values(by='distances')
 
         # Step 2: Extract node coordinates
@@ -656,6 +656,24 @@ class EPZSearch():
 
         # Step 3: Plot the OSMnx graph on a real map (with basemap)
         fig, ax = ox.plot_graph(G, show=False, close=False, bgcolor='w', node_color='gray', edge_color='gray', edge_linewidth=0.8)
+
+        # Plot sensitive locations as red dots
+        sensitive_plotted = False
+        if sensitive_locations is not None:
+            for loc in sensitive_locations:
+                # If loc is a dict-like node, get its coordinates
+                if isinstance(loc, dict):
+                    lon = loc.get('x', None)
+                    lat = loc.get('y', None)
+                elif isinstance(loc, (list, tuple)) and len(loc) == 2:
+                    lat, lon = loc
+                else:
+                    continue
+                if lon is not None and lat is not None and not sensitive_plotted:
+                    ax.plot(lon, lat, 'ro', markersize=6, alpha=0.8, label='Sensitive Location', zorder=10)
+                    sensitive_plotted = True
+                else:
+                    ax.plot(lon, lat, 'ro', markersize=6, alpha=0.8, zorder=10)
 
         # Transform node coordinates to lat/lon for basemap
         # Get all node coordinates in EPSG:4326
