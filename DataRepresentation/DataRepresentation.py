@@ -263,7 +263,7 @@ class UTMDataRepresentation(DataRepresentation):
         # cloackedCenterUTM = self.transformLatLon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         #cloackedCenterUTM = utm.from_latlon(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
         cloackedCenterUTM = self.fromlatlon.transform(activityCLuster.cloackedCenter[0], activityCLuster.cloackedCenter[1])
-        for activityPath in activityCLuster.activityPathList:
+        for activityPath in activityCLuster.activityPathListUTMEndpoint:
             values = jsonHelper.getJsonValues(activityPath, ["id", "map.polyline"])
             coords = polyline.decode(values["map.polyline"])
             if len(coords) == 0:
@@ -298,6 +298,16 @@ class UTMDataRepresentation(DataRepresentation):
                 activityEndpointList.append(self.UTMEndpoint(*beforeUTM, values["id"], "End", distance))
         return activityEndpointList
     
+    @staticmethod
+    def generateCloackedCenter(center, radius):
+        radius_degrees = radius / 111000
+        distance = random.uniform(0.1, 0.5)*radius_degrees
+        angle = random.uniform(0, 2*math.pi)
+        delta_x = math.cos(angle)*distance
+        delta_y = math.sin(angle)*distance
+        new_x = center[0] + delta_x
+        new_y = center[1] + delta_y
+        return [new_x, new_y]
     
 
     @staticmethod
@@ -317,6 +327,6 @@ class UTMDataRepresentation(DataRepresentation):
             utm_start = self.fromlatlon.transform(coords[0][0],coords[0][1])
             #utm_end = utm.from_latlon(coords[-1][0],coords[-1][1])
             utm_end = self.fromlatlon.transform(coords[-1][0],coords[-1][1])
-            activityEndpointList.append(self.UTMEndpoint(*utm_start))
-            activityEndpointList.append(self.UTMEndpoint(*utm_end))
+            activityEndpointList.append(self.UTMEndpoint(*utm_start, values["id"], "Start", 0))
+            activityEndpointList.append(self.UTMEndpoint(*utm_end, values["id"], "End", 0))
         return activityEndpointList

@@ -10,3 +10,4 @@ Data/Syntetic/
 *.vscode
 images/*
 cache/
+tmp*

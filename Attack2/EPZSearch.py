@@ -33,11 +33,18 @@ from geopy.distance import distance as geopy_distance
 import contextily as ctx
 from matplotlib.patches import Ellipse
 
+def is_within_circle(node_x, node_y, center_x, center_y, radius_m):
+    # Approximate meters to degrees for latitude/longitude
+    # For small distances, this is usually sufficient
+    dx = (node_x - center_x) * 111320 * np.cos(np.deg2rad(center_y))
+    dy = (node_y - center_y) * 111320
+    distance = np.sqrt(dx**2 + dy**2)
+    return distance <= radius_m
 class EPZSearch():
 
     def __init__(self, activityCluster, data_representation = DataRepresentationFactory.UTMDataRepresentationFactory().create_data_representation()):
         self.DataRepresentation = data_representation
-        self.EndpointsList = self.DataRepresentation.initActivityEndpointList(activityCluster)
+        self.EndpointsList = self.DataRepresentation.getActivityEndpointList(activityCluster.activityPathList)
         #self.zoneLetter = self.EndpointsList[0].zoneLetter
         #self.zoneNumber = self.EndpointsList[0].zoneNumber
         self.center = None
@@ -80,27 +87,18 @@ class EPZSearch():
         center = minimize(f_2, center_estimate, bounds=bounds, options={'maxiter': 10})
         center_xy = center.x  # still in EPSG:3857
 
-        # Convert center and points to lat/lon
-        center_latlon = self.tolatlon.transform(center_xy[0], center_xy[1])
-        point_latlon = [self.tolatlon.transform(p.x, p.y) for p in points]
+        lon_c, lat_c = self.tolatlon.transform(center_xy[0], center_xy[1])
+        center_latlon = (lat_c, lon_c)
+        point_latlon = []
+        for p in points:
+            lon_p, lat_p = self.tolatlon.transform(p.x, p.y)
+            point_latlon.append((lat_p, lon_p))
 
-        # Compute geodesic distances from center to each point
-        distances = np.array([
-            geopy_distance(center_latlon, pt).meters
-            for pt in point_latlon
-        ])
-
-        # Discrete radius values: 200, 400, ..., 1600 meters
-        possible_radii = np.arange(200, 1601, 200)
-        n_points = len(points)
-        min_required = int(np.ceil(0.9 * n_points))
-
-        selected_radius = possible_radii[-1]  # Default to largest if none fit
-        for r in possible_radii:
-            if np.sum(distances <= r) >= min_required:
-                selected_radius = r
-                break
-
+        # compute geodesic distances in meters and choose radius as next 200m bucket
+        distances = np.array([geopy_distance(center_latlon, pt).meters for pt in point_latlon])
+        max_distance = distances.max() if distances.size > 0 else 0.0
+        # round up to nearest 200 m (you can change the quantization if you prefer continuous radius)
+        selected_radius = max(200, int(np.ceil(max_distance / 200.0)) * 200)
         return (center_xy[0], center_xy[1]), selected_radius
 
     def epz_identification(self, tau_converged, tau_disjoint):
@@ -112,13 +110,12 @@ class EPZSearch():
         while True:
             prev_centroids = [self.fit_circle([P[i] for i in range(len(P)) if clusters[i] == j])[0] for j in range(k)]
             for iteration in range(max_iteration):
-                # Assignment step
+                # Assignment step: distance to current centroids (avoid recomputing fit_circle per point)
                 new_clusters = np.zeros(len(P), dtype=int)
                 for i, point in enumerate(P):
-                    distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*self.fit_circle([P[j] for j in range(len(P)) if clusters[j] == l])[0], '', '', 0)) for l in range(k)]
-                    new_clusters[i] = np.argmin(distances)
-                
-                # Update step
+                    distances = [self.euclidean_distance(point, UTMDataRepresentation.UTMEndpoint(*prev_centroids[l], '', '', 0)) for l in range(k)]
+                    new_clusters[i] = int(np.argmin(distances))
+                # Update step: recompute centroids based on new assignment
                 new_centroids = [self.fit_circle([P[i] for i in range(len(P)) if new_clusters[i] == j])[0] for j in range(k)]
                 
                 # Check for convergence
@@ -152,14 +149,14 @@ class EPZSearch():
             epz_results.append((center, radius, cluster_points))
         
         return epz_results
-
-    def retriveSensitiveLocationv2(self, epz_circle, realPOI, realRadius, cluster_num, tau_snap = 100, eps = 30, min_samples = 1):
+    
+    def retriveSensitiveLocationv2(self, epz_circle, realPOI, cloackedCenter, realRadius, cluster_num, tau_snap = 100, eps = 30, min_samples = 1):
     
         # Retrieve the graph
         while True:
             try:
                 app = self.tolatlon.transform(*epz_circle[0])
-                G = ox.graph_from_point(app, 500, network_type='all')
+                G = ox.graph_from_point(app, 500, network_type='all', simplify=True)
                 break
             except (req_exc.ConnectTimeout, ConnectionError, ProtocolError, req_exc.RequestException):
                 print(f"Connessione fallita, ritento")
@@ -261,13 +258,17 @@ class EPZSearch():
         else:
             min_node = column_sums['distances'].idxmin(skipna=True)
         
+        
         resultArray = []
+        epz_lat, epz_lon = self.tolatlon.transform(*epz_circle[0])
         for index, row in column_sums.head(5).iterrows():
             element = G.nodes[index]
             element["distances"] = row['distances']
-            resultArray.append(element)
+            # Only add if within EPZ circle
+            if is_within_circle(element['x'], element['y'], epz_lon, epz_lat, epz_circle[1]):
+                resultArray.append(element)
 
-        self.plot_heatmap_clusters_over_osmnx(G, column_sums, resultArray, self.tolatlon.transform(*epz_circle[0]), epz_circle[1], tuple(realPOI), realRadius, cluster_num)
+        self.plot_heatmap_clusters_over_osmnx(G, column_sums, resultArray, self.tolatlon.transform(*epz_circle[0]), epz_circle[1], tuple(realPOI), tuple(cloackedCenter), realRadius, cluster_num)
 
         return resultArray
 
@@ -635,7 +636,7 @@ class EPZSearch():
         plt.title('Heatmap of Sum of Positive Differences Over Street Grid')
         plt.show()
 
-    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, sensitive_locations, epz_circle, epz_radius, realPOI, realRadius, cluster_num):
+    def plot_heatmap_clusters_over_osmnx(self, G, column_sums, sensitive_locations, epz_circle, epz_radius, realPOI, cloackedCenter, realRadius, cluster_num):
         column_sums = column_sums.sort_values(by='distances')
 
         # Step 2: Extract node coordinates
@@ -670,10 +671,10 @@ class EPZSearch():
                 else:
                     continue
                 if lon is not None and lat is not None and not sensitive_plotted:
-                    ax.plot(lon, lat, 'ro', markersize=6, alpha=0.8, label='Sensitive Location', zorder=10)
+                    ax.plot(lon, lat, 'yo', markersize=6, alpha=1.0, label=f'Sensitive Locs ({len(sensitive_locations)})', zorder=10)
                     sensitive_plotted = True
                 else:
-                    ax.plot(lon, lat, 'ro', markersize=6, alpha=0.8, zorder=10)
+                    ax.plot(lon, lat, 'yo', markersize=6, alpha=1.0, zorder=10)
 
         # Transform node coordinates to lat/lon for basemap
         # Get all node coordinates in EPSG:4326
@@ -683,17 +684,21 @@ class EPZSearch():
         # Plot the realPOI as a green dot
         extra_lons = []
         extra_lats = []
-        if realPOI is not None:
-            realPOI_lat, realPOI_lon = realPOI
-            ax.plot(realPOI_lon, realPOI_lat, 'go', markersize=8, alpha=0.8, label=f'RealPOI r={realRadius}m', zorder=10)
+        if cloackedCenter is not None:
+            cloackedCenter_lat, cloackedCenter_lon = cloackedCenter
+            ax.plot(cloackedCenter_lon, cloackedCenter_lat, 'go', markersize=8, alpha=0.8, label=f'Cloacked r={realRadius}m', zorder=10)
             # Convert radius in meters to degrees for latitude and longitude
             radius_deg_lat = realRadius / 111320.0
-            radius_deg_lon = realRadius / (111320.0 * np.cos(np.deg2rad(realPOI_lat)))
+            radius_deg_lon = realRadius / (111320.0 * np.cos(np.deg2rad(cloackedCenter_lat)))
             # Use an ellipse to represent the circle correctly
-            ellipse = Ellipse((realPOI_lon, realPOI_lat), 2*radius_deg_lon, 2*radius_deg_lat, edgecolor='green', fill=False, linewidth=2, alpha=0.5, zorder=9)
+            ellipse = Ellipse((cloackedCenter_lon, cloackedCenter_lat), 2*radius_deg_lon, 2*radius_deg_lat, edgecolor='green', fill=False, linewidth=2, alpha=0.5, zorder=9)
             ax.add_patch(ellipse)
-            extra_lons.extend([realPOI_lon - radius_deg_lon, realPOI_lon + radius_deg_lon])
-            extra_lats.extend([realPOI_lat - radius_deg_lat, realPOI_lat + radius_deg_lat])
+            extra_lons.extend([cloackedCenter_lon - radius_deg_lon, cloackedCenter_lon + radius_deg_lon])
+            extra_lats.extend([cloackedCenter_lat - radius_deg_lat, cloackedCenter_lat + radius_deg_lat])
+
+        if realPOI is not None:
+            realPOI_lat, realPOI_lon = realPOI
+            ax.plot(realPOI_lon, realPOI_lat, 'ro', markersize=8, alpha=0.8, label=f'RealPOI', zorder=10)
 
         # Plot the EPZ center as a blue dot
         if epz_circle is not None:
@@ -728,5 +733,5 @@ class EPZSearch():
 
         # Add legend only if at least one is present
         if realPOI is not None or epz_circle is not None:
-            ax.legend(title=f"ACTIVITY {cluster_num}")
+            ax.legend(title=f"ACTIVITY {cluster_num}", title_fontproperties={'weight': 'bold'})
         fig.show()
