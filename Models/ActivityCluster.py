@@ -1,10 +1,8 @@
 from Utility.jsonHelper import jsonHelper
 from Models import Activity
-import matplotlib.pyplot as plt
 import os
 import geopy.distance
 import json
-import gpxpy
 
 class ActivityCluster():
 
@@ -38,25 +36,6 @@ class ActivityCluster():
             self.activityPathList.append(self.activitiesPath+"/"+activityId+".json")        
 
 
-    def updateActivityList(self):
-        activityIdList = jsonHelper.getActivityIdListByPath(self.activitiesPath)
-        collectedIdList = []
-        for activity in activityIdList:
-            latLng = jsonHelper.getJsonValue(os.path.join(self.activitiesPath, activity), "start_latlng")
-            distance = geopy.distance.geodesic(latLng, self.center).m
-            if distance < self.radius:
-                collectedIdList.append(activity.split(".")[0])
-        self.updateActivityListToActivityClusterJson(self, collectedIdList)
-        return
-
-
-    def initializeActivityList(self):
-        for activity in self.activityIdList:
-            currActivity = Activity.Activity.initActivityFromPath(self.activitiesPath +"/"+ activity +".json")
-            self.activityList.append(currActivity)
-        return
-    
-
     @staticmethod
     def initializeActivityClusterFromJson(jsonPath, id=None):
         jsonData = json.loads(open(jsonPath, encoding="utf-8").read())
@@ -71,18 +50,6 @@ class ActivityCluster():
             return None
 
 
-    @staticmethod
-    def updateActivityListToActivityClusterJson(activityCluster, activityList):
-        with open(activityCluster.ActivityClusterListPath+"/ActivityClusterList.json", 'r+', encoding="UTF-8") as jsonFile:
-            jsonData = json.load(jsonFile)
-            for activityClusterEntry in jsonData["ActivityClusterList"]:
-                if activityCluster["id"] == activityCluster.id:
-                    activityClusterEntry["activityIdList"] = activityList
-            jsonFile.seek(0)
-            json.dump(jsonData, jsonFile, indent = 4)
-            jsonFile.truncate()
-        return
-    
     def updateActivityClusterCenterInJson(self, newCenter):
         if list(newCenter)[0] == "center":
             self.center = newCenter[list(newCenter)[0]]
@@ -127,31 +94,6 @@ class ActivityCluster():
                 json.dump(jsonData, jsonFile, indent=4)
         return
 
-
-    @staticmethod
-    def addClusterToActivityClusterList(activityClusterPath, activityCluster) -> None:
-        with open(activityClusterPath, 'r+', encoding="UTF-8") as jsonFile:
-            jsonData = json.load(jsonFile)
-            activityCluster["id"] = len(jsonData["ActivityClusterList"])+1
-            jsonData["ActivityClusterList"].append(activityCluster)
-            jsonFile.seek(0)
-            json.dump(jsonData, jsonFile, indent=4)
-            jsonFile.truncate()
-        return
-
-    def addCircleToPlot(self, ax, cloacked = False, color = "black", addLabel = None):
-        if cloacked:
-            lat, lon = self.cloackedCenter
-        else:
-            lat, lon = self.center
-        radius = self.radius
-
-        ax.add_patch(plt.Circle((lon, lat), radius/111320, fill=False, color=color ))
-        if addLabel != None:
-            #ax.plot(lon, lat, "ob", label=f"Center={round(lat, 6), round(lon,6)} \n radius={radius} meters")
-            ax.plot(lon, lat, "ob", label=addLabel)
-        else:
-            ax.plot(lon, lat, "ob")
 
     def __str__(self):
         return f"Cerchio posizionato in {self.center} di raggio {self.radius}"

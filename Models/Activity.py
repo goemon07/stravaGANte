@@ -1,6 +1,5 @@
 import os
 import polyline
-import matplotlib.pyplot as plt
 import json
 from Utility.jsonHelper import jsonHelper
 import gpxpy
@@ -51,67 +50,6 @@ class Activity():
         return polyline.encode([coords[::-1] for coords in coordsList], 5, geojson=True)
 
 
-
-    def addActivityToPlot(self, plt, whatPolyline = "EPZ",  addLabel = False):
-        coordinateList = self.dodePolyline(whatPolyline)
-        ys, xs = zip(*coordinateList)
-        plt.plot(xs[0], ys[0], marker='o', color='g', ms=5)
-        if addLabel:
-            plt.plot(xs ,ys, label=str(self.id)+whatPolyline)
-        else:
-            plt.plot(xs ,ys)
-        plt.plot(xs[-1], ys[-1], marker='x', color='r', ms=5)
-        return [(ys[0], xs[0]), (ys[-1], xs[-1])]
-
-
-    def plotActivity(self):
-        plt.figure()
-        self.addActivityToPlot(plt)
-        plt.legend(loc="upper left")
-        plt.show()
-
-
-    def disguiseActivityInCluster(self, activityCluster, dataRepresentation, fuzz=False, cloacked = False, updateJson=False):
-        if cloacked:
-            if activityCluster.cloackedCenter is None:
-                activityCluster.updateActivityClusterCenterInJson({'cloackedCenter':dataRepresentation.generateCloackedCenter(activityCluster.center, activityCluster.radius)})
-            center = activityCluster.cloackedCenter
-        else:
-            center = activityCluster.center
-        center = dataRepresentation.transformLatLon(*center)
-        coordsList = self.decodePolyline()
-        coordsList = dataRepresentation.convertCoordsListIntoRepresentation(coordsList)
-
-        while dataRepresentation.distance(coordsList[0], center) <= activityCluster.radius:
-            coordsList.pop(0)
-        
-        #Fuzz Radius
-        if not fuzz:
-            new_point = dataRepresentation.getPointOnCircumference(center, coordsList[0], activityCluster.radius)
-            coordsList.insert(0, new_point)
-
-        while dataRepresentation.distance(coordsList[-1], center) <= activityCluster.radius:
-            coordsList.pop()
-
-        #Fuzz Radius
-        if not fuzz:
-            new_point = dataRepresentation.getPointOnCircumference(center, coordsList[-1], activityCluster.radius)
-            coordsList.append(new_point)
-
-        coordsList = dataRepresentation.convertCoordsListIntoLatLon(coordsList)
-        if dataRepresentation.__class__.__name__ == "GeocentricDataRepresentation":
-            return coordsList
-        
-        if cloacked:
-            self.cloackedEPZpolyLine = self.encodePolyLine(coordsList)
-            if updateJson:
-                self.updateActivityJson("map.cloackedepz_polyline", self.cloackedEPZpolyLine)
-            return
-        else:
-            self.EPZpolyLine = self.encodePolyline(coordsList)
-            if updateJson:
-                self.updateActivityJson("map.epz_polyline", self.EPZpolyLine)
-            return
 
     @staticmethod
     def save_gpx_from_polyline(polyline_str, filename):
