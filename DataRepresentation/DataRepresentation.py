@@ -111,12 +111,19 @@ class UTMDataRepresentation(DataRepresentation):
     def getActivityEndpointList(self, activityPathList, epz_radius=400):
         activityEndpointList = []
         for activityPath in activityPathList:
-            values = jsonHelper.getJsonValues(activityPath, ["id", "map.EPZ"])
+            values = jsonHelper.getJsonValues(
+                activityPath,
+                ["id", "map.EPZ", "map.EPZ_start_distance", "map.EPZ_end_distance"]
+            )
             coords = polyline.decode(values["map.EPZ"])
             if len(coords) == 0:
                 continue
+            start_dist = values.get("map.EPZ_start_distance") or epz_radius
+            end_dist = values.get("map.EPZ_end_distance") or epz_radius
             utm_start = self.fromlatlon.transform(coords[0][0], coords[0][1])
             utm_end = self.fromlatlon.transform(coords[-1][0], coords[-1][1])
-            activityEndpointList.append(self.UTMEndpoint(*utm_start, values["id"], "Start", epz_radius))
-            activityEndpointList.append(self.UTMEndpoint(*utm_end, values["id"], "End", epz_radius))
+            if start_dist > 0:
+                activityEndpointList.append(self.UTMEndpoint(*utm_start, values["id"], "Start", start_dist))
+            if end_dist > 0:
+                activityEndpointList.append(self.UTMEndpoint(*utm_end, values["id"], "End", end_dist))
         return activityEndpointList

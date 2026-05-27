@@ -71,21 +71,33 @@ class Activity():
         coordsList = self.decodePolyline()
         cloackedCoordsList = coordsList.copy()
         geoCoordsList = coordsList.copy()
-        ## Cut Start
+        ## Cut Start — track hidden path to recover the leaked distance o_l (paper §4.3)
+        hidden_start = []
         while sphericRepresentation.distance(coordsList[0], center) < radius:
-            last = coordsList.pop(0)
-        #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(tuple(center), coordsList[0], radius)
-        coordsList.insert(0, new_point)
-        ## Cut End
+            hidden_start.append(coordsList.pop(0))
+        new_point_start = sphericRepresentation.getPointOnCircumference(tuple(center), coordsList[0], radius)
+        if hidden_start:
+            path_s = hidden_start + [new_point_start]
+            epz_start_dist = sum(sphericRepresentation.distance(path_s[i], path_s[i + 1]) for i in range(len(path_s) - 1))
+        else:
+            epz_start_dist = 0.0
+        coordsList.insert(0, new_point_start)
+        ## Cut End — track hidden path
+        hidden_end = []
         while sphericRepresentation.distance(coordsList[-1], center) <= radius:
-            last = coordsList.pop()
-        #Fuzz Radius
-        new_point = sphericRepresentation.getPointOnCircumference(tuple(center), coordsList[-1], radius)
-        coordsList.append(new_point)
+            hidden_end.insert(0, coordsList.pop())
+        new_point_end = sphericRepresentation.getPointOnCircumference(tuple(center), coordsList[-1], radius)
+        if hidden_end:
+            path_e = [new_point_end] + hidden_end
+            epz_end_dist = sum(sphericRepresentation.distance(path_e[i], path_e[i + 1]) for i in range(len(path_e) - 1))
+        else:
+            epz_end_dist = 0.0
+        coordsList.append(new_point_end)
         ## Save encoded
         self.maps["EPZ"] = self.encodePolyline(coordsList)
         self.maps["EPZ+Fuzz"] = self.encodePolyline(coordsList[1:-1])
+        self.maps["EPZ_start_distance"] = epz_start_dist
+        self.maps["EPZ_end_distance"] = epz_end_dist
 
         self.save_gpx_from_polyline(self.maps["EPZ"], self.activityPath.replace(".json", "_EPZ.gpx"))
         
