@@ -11,3 +11,9 @@ Data/Syntetic/
 images/*
 cache/
 tmp*
+
+Data/Strava/*
+!Data/Strava/.gitkeep
+Data/Processed/*
+!Data/Processed/.gitkeep
+Data/kaggleDatasets/
