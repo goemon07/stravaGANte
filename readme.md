@@ -17,3 +17,12 @@ StravaGANte adopts a Generator–Discriminator framework:
 
 ## Evaluation
 The generator is evaluated on a synthetic benchmark (1,000 GPS activities across 200 location clusters, five EPZ radii from 200 m to 1,000 m) against two baselines — Strava's current **Static** EPZ and a **Random-per-track** perturbation — and validated on real, consented Strava clusters.
+
+## Data
+`Data/Syntetic/` is kept empty in this repository (only a `.gitkeep` placeholder) because the synthetic dataset (~7 GB of GPX routes) is too large for git. Download the archive from **[link TBD]** and extract it into that folder, e.g.:
+
+```
+tar --zstd -xf Syntetic_dataset.tar.zst -C Data/
+```
+
+so that `Data/Syntetic/<cluster_id>/` ends up populated with the `.gpx` route files as expected by the rest of the pipeline.

@@ -6,7 +6,8 @@
 *.pyc
 *.env
 *.gpx
-Data/Syntetic/
+Data/Syntetic/*
+!Data/Syntetic/.gitkeep
 *.vscode
 images/*
 cache/
