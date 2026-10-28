@@ -19,3 +19,4 @@ Data/Strava/*
 Data/Processed/*
 !Data/Processed/.gitkeep
 Data/kaggleDatasets/
+__pycache__/

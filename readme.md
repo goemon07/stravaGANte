@@ -20,6 +20,13 @@ The generator is evaluated on a synthetic benchmark (1,000 GPS activities across
 
 Evaluation uses the attack of Hassan et al. (USENIX Security '18). An attack counts as successful when the inferred location is within τ_e = 22.95 m of the true one, the threshold used by Dhondt et al. (CCS '22). The more recent attack of Dhondt et al. itself was not evaluated.
 
+## Setup
+Requires Python 3.10. Install the dependencies with:
+
+```
+pip install -r requirements.txt
+```
+
 ## Data
 `Data/Syntetic/` is kept empty in this repository (only a `.gitkeep` placeholder) because the synthetic dataset (~7 GB of GPX routes) is too large for git. Download the archive from [huggingface.co/datasets/wanaracur/syntetic.gpx](https://huggingface.co/datasets/wanaracur/syntetic.gpx) and extract it into that folder, e.g.:
 

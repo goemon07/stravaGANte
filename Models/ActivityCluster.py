@@ -96,7 +96,7 @@ class ActivityCluster():
 
 
     def __str__(self):
-        return f"Cerchio posizionato in {self.center} di raggio {self.radius}"
+        return f"Circle centered at {self.center} with radius {self.radius}"
 
     
     ## Group together activities that starts within a certain radius
